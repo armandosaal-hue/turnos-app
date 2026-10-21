@@ -1,0 +1,256 @@
+import { addDays, dayIndex, fmtShort, isWeekend } from './dates'
+import { codeLabel, kindOf } from './legend'
+import { newViolations, violations } from './rules'
+import type { AppState, Cambio, CambioType, CellChange, Grid, Legend, Rules } from './types'
+
+export interface ReturnOption {
+  date: string
+  myCode: string // lo que tengo yo ese día antes del cambio
+  partnerCode: string // lo que tiene el compañero ese día antes del cambio
+  score: number
+  notes: string[]
+}
+
+export interface Candidate {
+  personId: string
+  name: string
+  codeOnDate: string
+  score: number
+  reasons: string[]
+  softIssues: string[]
+  balance: number
+  returns: ReturnOption[]
+}
+
+export interface Discarded {
+  personId: string
+  name: string
+  reason: string
+}
+
+export interface Recommendation {
+  type?: CambioType
+  myCode?: string
+  error?: string
+  candidates: Candidate[]
+  discarded: Discarded[]
+}
+
+type Row = Record<string, string>
+
+interface Ctx {
+  legend: Legend
+  rules: Rules
+  grid: Grid
+}
+
+// ¿Puede esta persona trabajar ese día? Devuelve el motivo si no.
+export function unavailableReason(ctx: Ctx, row: Row, date: string): string | null {
+  const code = row[date]
+  if (code === undefined) return 'sin datos ese día'
+  const kind = kindOf(ctx.legend, code)
+  if (kind === 'trabajo' || kind === 'ocupado') return `trabaja ese día (${codeLabel(ctx.legend, code)})`
+  if (kind === 'ausencia') return `no disponible (${codeLabel(ctx.legend, code)})`
+  const ran = ctx.rules.restAfterNight
+  if (ran.enabled && code === ran.restCode && row[addDays(date, -1)] === ran.nightCode) {
+    return 'es el descanso posterior a su noche'
+  }
+  return null
+}
+
+function isSwappable(ctx: Ctx, code: string | undefined): boolean {
+  return code !== undefined && kindOf(ctx.legend, code) === 'trabajo'
+}
+
+// Las infracciones del calendario original se calculan una vez por persona.
+const baseCache = new WeakMap<Row, { legend: Legend; rules: Rules; v: ReturnType<typeof violations> }>()
+
+function hardAndSoft(ctx: Ctx, before: Row, after: Row) {
+  let base = baseCache.get(before)
+  if (!base || base.legend !== ctx.legend || base.rules !== ctx.rules) {
+    base = { legend: ctx.legend, rules: ctx.rules, v: violations(before, ctx.legend, ctx.rules) }
+    baseCache.set(before, base)
+  }
+  const nv = newViolations(base.v, violations(after, ctx.legend, ctx.rules))
+  return { hard: nv.filter((v) => v.hard), soft: nv.filter((v) => !v.hard) }
+}
+
+function runAround(ctx: Ctx, row: Row, date: string): number {
+  const working = (d: string) => {
+    const c = row[d]
+    if (c === undefined) return false
+    const k = kindOf(ctx.legend, c)
+    return k === 'trabajo' || k === 'ocupado'
+  }
+  if (!working(date)) return 0
+  let n = 1
+  for (let d = addDays(date, -1); working(d); d = addDays(d, -1)) n++
+  for (let d = addDays(date, 1); working(d); d = addDays(d, 1)) n++
+  return n
+}
+
+// Saldo con un compañero: positivo = me debe días; negativo = le debo yo.
+export function balanceWith(cambios: Cambio[], partnerId: string): number {
+  let b = 0
+  for (const c of cambios) {
+    if (c.partnerId !== partnerId || c.returnDate) continue
+    b += c.type === 'quitar' ? -1 : 1
+  }
+  return b
+}
+
+export function recommend(state: AppState, meId: string, date: string): Recommendation {
+  const ctx: Ctx = { legend: state.legend, rules: state.rules, grid: state.grid }
+  const me = state.grid[meId]
+  const empty = { candidates: [], discarded: [] }
+  if (!me) return { ...empty, error: 'No tengo tu calendario cargado.' }
+  const myCode = me[date]
+  if (myCode === undefined) return { ...empty, error: 'No hay datos tuyos para ese día.' }
+
+  let type: CambioType
+  if (isSwappable(ctx, myCode)) type = 'quitar'
+  else {
+    const why = unavailableReason(ctx, me, date)
+    if (why) return { ...empty, myCode, error: `Ese día no puedes ponerte a trabajar: ${why}.` }
+    type = 'trabajar'
+  }
+
+  const candidates: Candidate[] = []
+  const discarded: Discarded[] = []
+  const dates = allDates(state.grid)
+
+  for (const p of Object.values(state.persons)) {
+    if (p.id === meId) continue
+    const row = state.grid[p.id]
+    if (!row) continue
+    const pc = row[date]
+    const discard = (reason: string) => discarded.push({ personId: p.id, name: p.name, reason })
+    if (!p.candidate) {
+      discard('excluido de candidatos (turno fijo u opción en Ajustes)')
+      continue
+    }
+
+    // Quién trabaja el día D tras el cambio, y qué turno.
+    let shift: string
+    if (type === 'quitar') {
+      const why = unavailableReason(ctx, row, date)
+      if (why) {
+        discard(why)
+        continue
+      }
+      shift = myCode
+    } else {
+      if (!isSwappable(ctx, pc)) {
+        discard(pc === undefined ? 'sin datos ese día' : `no tiene turno de 12 h ese día (${codeLabel(ctx.legend, pc)})`)
+        continue
+      }
+      shift = pc
+    }
+
+    const meAfter: Row = { ...me, [date]: type === 'quitar' ? pc : shift }
+    const pAfter: Row = { ...row, [date]: type === 'quitar' ? shift : myCode }
+    const mine = hardAndSoft(ctx, me, meAfter)
+    const theirs = hardAndSoft(ctx, row, pAfter)
+    if (theirs.hard.length) {
+      discard(`a ${p.name.split(',')[1]?.trim() || p.name} le deja ${theirs.hard[0].message}`)
+      continue
+    }
+    if (mine.hard.length) {
+      discard(`a ti te deja ${mine.hard[0].message}`)
+      continue
+    }
+
+    const returns: ReturnOption[] = []
+    for (const r of dates) {
+      if (r === date) continue
+      // Devolución: en R se intercambian los papeles.
+      const giver = type === 'quitar' ? row : me // quien tiene turno en R
+      const taker = type === 'quitar' ? me : row // quien lo cubre en R
+      const giverCode = giver[r]
+      if (!isSwappable(ctx, giverCode)) continue
+      if (unavailableReason(ctx, taker, r)) continue
+      const takerCode = taker[r]
+      const meRet: Row = { ...meAfter, [r]: type === 'quitar' ? giverCode : takerCode }
+      const pRet: Row = { ...pAfter, [r]: type === 'quitar' ? takerCode : giverCode }
+      const m2 = hardAndSoft(ctx, me, meRet)
+      const p2 = hardAndSoft(ctx, row, pRet)
+      if (m2.hard.length || p2.hard.length) continue
+      const notes: string[] = []
+      let score = 100 - Math.abs(dayIndex(r) - dayIndex(date))
+      if (giverCode === shift) {
+        score += 15
+        notes.push('mismo turno')
+      }
+      if (isWeekend(r) === isWeekend(date)) score += 5
+      if (isWeekend(r) && isWeekend(date)) notes.push('finde por finde')
+      const soft = [...m2.soft, ...p2.soft]
+      score -= soft.length * 20
+      for (const s of soft) notes.push(`aviso: ${s.message}`)
+      returns.push({ date: r, myCode: me[r], partnerCode: row[r], score, notes })
+    }
+    returns.sort((a, b) => b.score - a.score)
+
+    const balance = balanceWith(state.cambios, p.id)
+    const reasons: string[] = []
+    reasons.push(
+      type === 'quitar'
+        ? `Ese día: ${codeLabel(ctx.legend, pc)}`
+        : `Ese día trabaja: ${codeLabel(ctx.legend, pc)}`,
+    )
+    reasons.push(
+      `Día anterior: ${codeLabel(ctx.legend, row[addDays(date, -1)])} · día siguiente: ${codeLabel(ctx.legend, row[addDays(date, 1)])}`,
+    )
+    if (balance > 0) reasons.push(`Te debe ${balance} ${balance === 1 ? 'día' : 'días'}`)
+    if (balance < 0) reasons.push(`Le debes ${-balance} ${balance === -1 ? 'día' : 'días'}`)
+
+    const softIssues = [...mine.soft, ...theirs.soft].map((v) => v.message)
+    let score = 0
+    if (returns.length) score += 40 + Math.min(returns.length, 10) * 2 + Math.round(returns[0].score / 20)
+    score += balance * 10
+    score -= softIssues.length * 15
+    const run = runAround(ctx, pAfter, date)
+    if (run > 3) {
+      score -= (run - 3) * 5
+      reasons.push(`Le quedarían ${run} días de trabajo seguidos`)
+    }
+
+    candidates.push({ personId: p.id, name: p.name, codeOnDate: pc, score, reasons, softIssues, balance, returns })
+  }
+
+  candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+  discarded.sort((a, b) => a.name.localeCompare(b.name))
+  return { type, myCode, candidates, discarded }
+}
+
+export function allDates(grid: Grid): string[] {
+  const set = new Set<string>()
+  for (const row of Object.values(grid)) for (const d of Object.keys(row)) set.add(d)
+  return [...set].sort()
+}
+
+// Celdas que cambian al registrar un cambio (y su devolución, si la hay).
+export function cambioCells(
+  state: AppState,
+  meId: string,
+  date: string,
+  partnerId: string,
+  returnDate?: string,
+): CellChange[] {
+  const me = state.grid[meId]
+  const p = state.grid[partnerId]
+  const cells: CellChange[] = [
+    { personId: meId, date, before: me[date], after: p[date] },
+    { personId: partnerId, date, before: p[date], after: me[date] },
+  ]
+  if (returnDate) {
+    cells.push(
+      { personId: meId, date: returnDate, before: me[returnDate], after: p[returnDate] },
+      { personId: partnerId, date: returnDate, before: p[returnDate], after: me[returnDate] },
+    )
+  }
+  return cells
+}
+
+export function describeDate(date: string): string {
+  return fmtShort(date)
+}
