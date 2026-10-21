@@ -629,3 +629,13 @@ pre.err {
   border-radius: 8px;
   padding: 8px;
 }
+textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 8px 10px;
+}

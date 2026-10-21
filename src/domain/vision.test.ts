@@ -1,4 +1,4 @@
-import { readingsToPlantilla, detectedMonth, ReadingSchema, type Reading } from './vision'
+import { readingsToPlantilla, detectedMonth, ReadingSchema, parsePastedReadings, chatPrompt, type Reading } from './vision'
 import { FIXED_BLANK } from './importer'
 
 const fila = (nombre: string, celdas: string[], extra: Partial<Reading['filas'][number]> = {}) => ({
@@ -63,5 +63,28 @@ describe('lectura de imágenes', () => {
 
   it('valida la respuesta de la API', () => {
     expect(() => ReadingSchema.parse({ mes: 1 })).toThrow()
+  })
+})
+
+describe('respuesta pegada del chat', () => {
+  const one = { mes: 11, anio: 2026, dias: [1, 2], filas: [{ puesto: '1', nombre: 'A, B', seccion: '', turno_fijo: false, celdas: ['N', ''], dudosas: [] }], avisos: [] }
+  it('lee un bloque de código con varias fotos y texto alrededor', () => {
+    const text = 'Aquí tienes:\n```json\n' + JSON.stringify([one, { ...one, mes: 0 }]) + '\n```\nRevisa la fila 3.'
+    const r = parsePastedReadings(text)
+    expect(r).toHaveLength(2)
+    expect(r[0].filas[0].celdas).toEqual(['N', ''])
+  })
+  it('acepta un objeto suelto sin bloque y rellena campos que falten', () => {
+    const r = parsePastedReadings(JSON.stringify({ dias: [1], filas: [{ nombre: 'A, B', puesto: 3, celdas: [null] }] }))
+    expect(r[0]).toMatchObject({ mes: 0, anio: 0, avisos: [], filas: [{ puesto: '3', seccion: '', turno_fijo: false, celdas: [''], dudosas: [] }] })
+  })
+  it('explica una respuesta cortada', () => {
+    expect(() => parsePastedReadings('```json\n[{"mes": 11, "dias": [1,2], "filas": [{"nombre": "A')).toThrow(/cortada/)
+  })
+  it('explica un texto sin tabla', () => {
+    expect(() => parsePastedReadings('No puedo leer la imagen')).toThrow(/No encuentro/)
+  })
+  it('las instrucciones piden el formato JSON', () => {
+    expect(chatPrompt()).toMatch(/```json/)
   })
 })

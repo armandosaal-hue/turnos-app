@@ -25,11 +25,13 @@ export function ImageImport({
   state,
   onCancel,
   onParsed,
+  onUseChat,
 }: {
   files: File[]
   state: AppState
   onCancel: () => void
   onParsed: (parsed: ParsedPlantilla, label: string) => void
+  onUseChat: () => void
 }) {
   const [settings, setSettings] = useState<VisionSettings | null>(null)
   const [keyDraft, setKeyDraft] = useState('')
@@ -96,7 +98,7 @@ export function ImageImport({
         <div className="card">
           <p>Para leer fotos de la plantilla, la app usa la IA de Claude con tu propia clave de API de Anthropic.</p>
           <ol className="steps">
-            <li>Entra en console.anthropic.com, crea una cuenta y recarga saldo (prepago).</li>
+            <li>Entra en platform.claude.com, crea una cuenta y recarga saldo (prepago).</li>
             <li>En <b>API Keys</b>, pulsa <b>Create Key</b> y copia la clave (empieza por "sk-ant-").</li>
             <li>Pégala aquí. Se guarda solo en este dispositivo y no sale en las copias de seguridad.</li>
           </ol>
@@ -104,8 +106,12 @@ export function ImageImport({
             <span>Clave de API</span>
             <input id="api-key" type="password" autoComplete="off" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value.trim())} placeholder="sk-ant-…" />
           </label>
+          <p className="hint">
+            ¿No tienes clave o no puedes pagar la API? Puedes leer las fotos con tu chat de Claude, sin coste aparte.
+          </p>
           <div className="row">
             <button onClick={onCancel}>Cancelar</button>
+            <button onClick={onUseChat}>Usar mi chat de Claude</button>
             <button
               className="primary"
               disabled={!keyDraft.startsWith('sk-')}
@@ -246,7 +252,7 @@ function toImg(file: File): Img {
   return { id: `${Date.now()}-${seq++}`, file, url: URL.createObjectURL(file), rotation: 0, status: 'pendiente' }
 }
 
-function ReviewGrid({
+export function ReviewGrid({
   plantilla,
   state,
   images,
@@ -308,7 +314,9 @@ function ReviewGrid({
         <label className="check">
           <input type="checkbox" checked={onlyDoubt} onChange={(e) => setOnlyDoubt(e.target.checked)} /> Solo filas con dudas
         </label>
-        <button className="link" onClick={() => setShowImgs(!showImgs)}>{showImgs ? 'Ocultar fotos' : 'Ver fotos'}</button>
+        {images.length > 0 && (
+          <button className="link" onClick={() => setShowImgs(!showImgs)}>{showImgs ? 'Ocultar fotos' : 'Ver fotos'}</button>
+        )}
       </div>
       {showImgs && (
         <div className="photo-strip">
@@ -357,7 +365,7 @@ function ReviewGrid({
         </table>
       </div>
       <div className="row">
-        <button onClick={onBack}>Volver a las fotos</button>
+        <button onClick={onBack}>Volver</button>
         <button className="primary" onClick={onAccept}>Continuar</button>
       </div>
 

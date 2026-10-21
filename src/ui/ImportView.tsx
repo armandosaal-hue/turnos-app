@@ -10,10 +10,12 @@ import { fileKind } from '../fileKind'
 
 // La lectura de fotos (y el cliente de la API) solo se descarga cuando se usa.
 const ImageImport = lazy(() => import('./ImageImport').then((m) => ({ default: m.ImageImport })))
+const ChatImport = lazy(() => import('./ChatImport').then((m) => ({ default: m.ChatImport })))
 
 type Step =
   | { s: 'idle' }
   | { s: 'images'; files: File[] }
+  | { s: 'chat' }
   | { s: 'codes'; parsed: ParsedPlantilla; fileName: string; defs: Record<string, ShiftCode> }
   | { s: 'review'; parsed: ParsedPlantilla; fileName: string; analysis: ImportAnalysis }
 
@@ -89,7 +91,15 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
     return (
       <Suspense fallback={<div className="empty">Cargando…</div>}>
         {error && <p className="warn">{error}</p>}
-        <ImageImport files={step.files} state={state} onCancel={() => setStep({ s: 'idle' })} onParsed={next} />
+        <ImageImport files={step.files} state={state} onCancel={() => setStep({ s: 'idle' })} onParsed={next} onUseChat={() => setStep({ s: 'chat' })} />
+      </Suspense>
+    )
+  }
+
+  if (step.s === 'chat') {
+    return (
+      <Suspense fallback={<div className="empty">Cargando…</div>}>
+        <ChatImport state={state} onCancel={() => setStep({ s: 'idle' })} onParsed={next} />
       </Suspense>
     )
   }
@@ -242,6 +252,9 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
           </label>
         </div>
         {busy && <p className="hint">Abriendo…</p>}
+        <button className="secondary" onClick={() => setStep({ s: 'chat' })}>
+          Leer fotos con mi chat de Claude (sin clave de API)
+        </button>
         <p className="hint">
           Si la galería se queda en negro o no responde, usa <b>Desde Archivos</b>: las fotos de WhatsApp están en Imágenes o en la carpeta WhatsApp Images.
         </p>

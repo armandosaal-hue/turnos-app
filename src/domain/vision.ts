@@ -115,3 +115,61 @@ export function detectedMonth(readings: ImageReading[]): { year: number; month: 
   const r = readings.find((x) => x.reading.mes >= 1 && x.reading.mes <= 12 && x.reading.anio >= 2000)
   return r ? { year: r.reading.anio, month: r.reading.mes } : null
 }
+
+// Lectura sin API: Armando pega estas instrucciones en su chat de Claude junto con
+// las fotos, y luego pega aquí la respuesta.
+export function chatPrompt(): string {
+  return `${VISION_PROMPT.replace('Esta imagen es una foto', 'Cada imagen adjunta es una foto')}
+
+Formato de la respuesta: devuelve SOLO un bloque de código \`\`\`json con una lista que tenga un objeto por foto, en el mismo orden que las fotos. Sin texto antes ni después. Cada objeto tiene exactamente estos campos:
+{
+  "mes": número del 1 al 12 o 0,
+  "anio": número o 0,
+  "dias": [números de día de cada columna],
+  "filas": [
+    { "puesto": "texto", "nombre": "APELLIDOS, NOMBRE", "seccion": "", "turno_fijo": false, "celdas": ["N", "D", "", "L", ...], "dudosas": [índices] }
+  ],
+  "avisos": ["texto"]
+}
+No resumas ni abrevies: escribe todas las filas y todas las celdas. Si la respuesta no te cabe, escribe las fotos que quepan completas y avisa al final de cuáles faltan.`
+}
+
+const LenientReading = z.object({
+  mes: z.coerce.number().int().catch(0),
+  anio: z.coerce.number().int().catch(0),
+  dias: z.array(z.coerce.number().int()),
+  filas: z.array(
+    z.object({
+      puesto: z.coerce.string().catch(''),
+      nombre: z.string(),
+      seccion: z.string().catch(''),
+      turno_fijo: z.boolean().catch(false),
+      celdas: z.array(z.union([z.string(), z.null()]).transform((v) => v ?? '')),
+      dudosas: z.array(z.coerce.number().int()).catch([]),
+    }),
+  ),
+  avisos: z.array(z.string()).catch([]),
+})
+
+// Extrae las lecturas de la respuesta pegada (con o sin bloque de código, una foto o varias).
+export function parsePastedReadings(text: string): Reading[] {
+  const block = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] ?? text
+  const start = block.search(/[[{]/)
+  const end = Math.max(block.lastIndexOf(']'), block.lastIndexOf('}'))
+  if (start < 0 || end <= start) throw new Error('No encuentro la tabla en el texto pegado. Copia la respuesta completa de Claude.')
+  let data: unknown
+  try {
+    data = JSON.parse(block.slice(start, end + 1))
+  } catch {
+    throw new Error('La respuesta está cortada o incompleta. Pide a Claude que la repita, o envía menos fotos en cada mensaje.')
+  }
+  const list = Array.isArray(data) ? data : [data]
+  const out: Reading[] = []
+  list.forEach((item, i) => {
+    const r = LenientReading.safeParse(item)
+    if (!r.success) throw new Error(`La foto ${i + 1} de la respuesta no tiene el formato esperado (faltan días, filas o celdas).`)
+    out.push(r.data)
+  })
+  if (!out.some((r) => r.filas.length)) throw new Error('La respuesta no trae ninguna fila con nombre.')
+  return out
+}
