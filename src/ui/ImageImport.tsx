@@ -4,7 +4,7 @@ import type { ParsedPlantilla } from '../domain/importer'
 import { displayCode, kindOf } from '../domain/legend'
 import type { AppState } from '../domain/types'
 import { detectedMonth, readingsToPlantilla, type ImageReading, type VisionPlantilla } from '../domain/vision'
-import { describeError, prepareImage, readImage } from '../vision'
+import { prepareImage } from '../image'
 import { fileKind } from '../fileKind'
 import { loadVisionSettings, saveVisionSettings, type VisionSettings } from '../visionSettings'
 
@@ -51,16 +51,25 @@ export function ImageImport({
     if (!settings?.apiKey) return
     setReading(true)
     const queue = imgs.filter((i) => i.status !== 'hecha')
+    // El cliente de la API se descarga aquí, al leer, no al abrir la pantalla.
+    let api: typeof import('../vision')
+    try {
+      api = await import('../vision')
+    } catch (e) {
+      for (const img of queue) update(img.id, { status: 'error', error: `No se pudo cargar el lector: ${e instanceof Error ? e.message : String(e)}` })
+      setReading(false)
+      return
+    }
     const worker = async () => {
       for (let img = queue.shift(); img; img = queue.shift()) {
         update(img.id, { status: 'leyendo', error: undefined })
         try {
           const data = await prepareImage(img.file, img.rotation)
-          const res = await readImage(settings, data)
+          const res = await api.readImage(settings, data)
           setCost((c) => c + res.costUsd)
           update(img.id, { status: 'hecha', reading: res.reading })
         } catch (e) {
-          update(img.id, { status: 'error', error: describeError(e) })
+          update(img.id, { status: 'error', error: api.describeError(e) })
         }
       }
     }

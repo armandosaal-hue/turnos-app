@@ -620,3 +620,12 @@ table.unit {
   outline-offset: -2px;
   background: color-mix(in srgb, var(--warn) 18%, var(--card));
 }
+pre.err {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
