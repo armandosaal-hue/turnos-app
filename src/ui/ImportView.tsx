@@ -46,8 +46,18 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
 
   const onFiles = async (list: FileList) => {
     setError('')
+    setBusy(true)
     const files = [...list]
-    const kinds = await Promise.all(files.map(fileKind))
+    let kinds: Awaited<ReturnType<typeof fileKind>>[]
+    try {
+      kinds = await Promise.all(files.map(fileKind))
+    } catch (e) {
+      setError(`No se pueden leer los archivos: ${e instanceof Error ? e.message : String(e)}`)
+      setBusy(false)
+      return
+    } finally {
+      setBusy(false)
+    }
     const images = files.filter((_, i) => kinds[i] === 'image')
     const heic = kinds.filter((k) => k === 'heic').length
     const notes: string[] = []
@@ -202,21 +212,39 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
           Fotos de la plantilla (puedes elegir varias a la vez, también las de WhatsApp), Excel (.xlsx) o CSV. Si el periodo ya está cargado, verás solo las
           diferencias.
         </p>
-        <label className="file">
-          <input
-            id="plantilla"
-            type="file"
-            accept="image/*,.xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-            multiple
-            disabled={busy}
-            onChange={(e) => {
-              if (e.target.files?.length) onFiles(e.target.files)
-              e.target.value = ''
-            }}
-          />
-          {busy ? 'Leyendo…' : 'Elegir archivos'}
-        </label>
-        <p className="hint">Si no se abre el selector de archivos (pasa en la app de Claude en Android), abre esta página en Chrome.</p>
+        <div className="col">
+          <label className="file">
+            <input
+              id="galeria"
+              type="file"
+              accept="image/*"
+              multiple
+              disabled={busy}
+              onChange={(e) => {
+                if (e.target.files?.length) onFiles(e.target.files)
+                e.target.value = ''
+              }}
+            />
+            Fotos de la galería
+          </label>
+          <label className="file">
+            <input
+              id="plantilla"
+              type="file"
+              multiple
+              disabled={busy}
+              onChange={(e) => {
+                if (e.target.files?.length) onFiles(e.target.files)
+                e.target.value = ''
+              }}
+            />
+            Fotos o Excel desde Archivos
+          </label>
+        </div>
+        {busy && <p className="hint">Abriendo…</p>}
+        <p className="hint">
+          Si la galería se queda en negro o no responde, usa <b>Desde Archivos</b>: las fotos de WhatsApp están en Imágenes o en la carpeta WhatsApp Images.
+        </p>
         {error && <p className="warn">{error}</p>}
       </div>
       <h2>Versiones cargadas</h2>

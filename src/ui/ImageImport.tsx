@@ -166,7 +166,6 @@ export function ImageImport({
         <input
           id="mas-fotos"
           type="file"
-          accept="image/*"
           multiple
           disabled={reading}
           onChange={async (e) => {
