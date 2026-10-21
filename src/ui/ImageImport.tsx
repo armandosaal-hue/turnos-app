@@ -5,6 +5,7 @@ import { displayCode, kindOf } from '../domain/legend'
 import type { AppState } from '../domain/types'
 import { detectedMonth, readingsToPlantilla, type ImageReading, type VisionPlantilla } from '../domain/vision'
 import { describeError, prepareImage, readImage } from '../vision'
+import { fileKind } from '../fileKind'
 import { loadVisionSettings, saveVisionSettings, type VisionSettings } from '../visionSettings'
 
 interface Img {
@@ -153,7 +154,19 @@ export function ImageImport({
         ))}
       </div>
       <label className="file">
-        <input id="mas-fotos" type="file" accept="image/*" multiple disabled={reading} onChange={(e) => e.target.files && setImgs((l) => [...l, ...[...e.target.files!].map(toImg)])} />
+        <input
+          id="mas-fotos"
+          type="file"
+          accept="image/*"
+          multiple
+          disabled={reading}
+          onChange={async (e) => {
+            const list = [...(e.target.files ?? [])]
+            e.target.value = ''
+            const kinds = await Promise.all(list.map(fileKind))
+            setImgs((l) => [...l, ...list.filter((_, i) => kinds[i] === 'image').map(toImg)])
+          }}
+        />
         Añadir más fotos
       </label>
       <p className="hint">

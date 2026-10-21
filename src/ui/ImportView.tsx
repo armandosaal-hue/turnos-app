@@ -6,6 +6,7 @@ import { fmtShort } from '../domain/dates'
 import { analyzeImport, applyImport, unknownCodes, type ImportAnalysis } from '../domain/state'
 import type { AppState, Kind, ShiftCode } from '../domain/types'
 import { CodeChip } from './common'
+import { fileKind } from '../fileKind'
 
 // La lectura de fotos (y el cliente de la API) solo se descarga cuando se usa.
 const ImageImport = lazy(() => import('./ImageImport').then((m) => ({ default: m.ImageImport })))
@@ -46,20 +47,26 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
   const onFiles = async (list: FileList) => {
     setError('')
     const files = [...list]
-    const images = files.filter((f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic)$/i.test(f.name))
+    const kinds = await Promise.all(files.map(fileKind))
+    const images = files.filter((_, i) => kinds[i] === 'image')
+    const heic = kinds.filter((k) => k === 'heic').length
+    const notes: string[] = []
+    if (heic) notes.push(`${heic} ${heic === 1 ? 'foto está' : 'fotos están'} en formato HEIC (iPhone), que el navegador no abre: envíala por WhatsApp o guárdala como JPG.`)
     if (images.length) {
-      if (images.length !== files.length) setError('Has mezclado fotos con otros archivos: se cargan solo las fotos.')
+      if (images.length + heic !== files.length) notes.push('Has mezclado fotos con otros archivos: se cargan solo las fotos.')
+      setError(notes.join(' '))
       setStep({ s: 'images', files: images })
       return
     }
-    const file = files[0]
-    if (!file) return
+    const i = kinds.findIndex((k) => k === 'xlsx' || k === 'csv')
+    if (i < 0) {
+      setError(notes.join(' ') || 'No reconozco el archivo. Usa fotos (JPG, PNG, las de WhatsApp), Excel (.xlsx) o CSV. Los .xls antiguos: ábrelos y guárdalos como .xlsx.')
+      return
+    }
+    const file = files[i]
     setBusy(true)
     try {
-      let rows: Cell[][]
-      if (/\.csv$/i.test(file.name)) rows = parseCsv(await file.text())
-      else if (/\.xlsx$/i.test(file.name)) rows = (await readSheet(file)) as Cell[][]
-      else throw new Error('Formato no admitido. Usa fotos (JPG, PNG), .xlsx o .csv (los .xls antiguos: ábrelos y guárdalos como .xlsx).')
+      const rows = kinds[i] === 'csv' ? parseCsv(await file.text()) : ((await readSheet(file)) as Cell[][])
       next(parsePlantilla(rows), file.name)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -71,6 +78,7 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
   if (step.s === 'images') {
     return (
       <Suspense fallback={<div className="empty">Cargando…</div>}>
+        {error && <p className="warn">{error}</p>}
         <ImageImport files={step.files} state={state} onCancel={() => setStep({ s: 'idle' })} onParsed={next} />
       </Suspense>
     )

@@ -5,7 +5,12 @@ import { MODELS, type VisionSettings } from './visionSettings'
 
 // Reduce la foto (lado largo ≤ 2000 px), aplica el giro y la pasa a JPEG en base64.
 export async function prepareImage(file: File, rotation: number): Promise<string> {
-  const bitmap = await createImageBitmap(file)
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(file)
+  } catch {
+    throw new Error('El navegador no puede abrir esta foto. Guárdala como JPG y vuelve a intentarlo.')
+  }
   const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height))
   const w = Math.round(bitmap.width * scale)
   const h = Math.round(bitmap.height * scale)
