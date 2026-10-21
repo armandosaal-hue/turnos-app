@@ -40,6 +40,8 @@ export interface Rules {
   forbiddenSequences: { enabled: boolean; hard: boolean; items: { from: string; to: string }[] }
   maxConsecutiveWorkDays: { enabled: boolean; hard: boolean; value: number }
   maxConsecutiveNights: { enabled: boolean; hard: boolean; value: number }
+  // Orden de candidatos: encadenar turnos y no partir los libres (no descarta).
+  preferChains?: { enabled: boolean }
 }
 
 export interface Violation {

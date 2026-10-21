@@ -89,6 +89,40 @@ function runAround(ctx: Ctx, row: Row, date: string): number {
   return n
 }
 
+// Cómo encaja un día en el calendario de una persona, para el orden de candidatos:
+// mucha gente prefiere encadenar turnos y librar seguido.
+// "recibe": el día pasa a ser de trabajo; "cede": el día pasa a ser libre.
+export function fitScore(ctx: Ctx, row: Row, date: string, role: 'recibe' | 'cede'): { score: number; note?: string } {
+  if (ctx.rules.preferChains?.enabled === false) return { score: 0 }
+  const ran = ctx.rules.restAfterNight
+  const busy = (d: string) => {
+    const c = row[d]
+    if (c === undefined) return false
+    const k = kindOf(ctx.legend, c)
+    if (k === 'trabajo' || k === 'ocupado') return true
+    return ran.enabled && c === ran.restCode && row[addDays(d, -1)] === ran.nightCode // saliente
+  }
+  const free = (d: string) => row[d] !== undefined && kindOf(ctx.legend, row[d]) === 'libre' && !busy(d)
+  const freeRun = (from: string, step: number) => {
+    let n = 0
+    for (let d = from; free(d); d = addDays(d, step)) n++
+    return n
+  }
+  const before = addDays(date, -1)
+  const after = addDays(date, 1)
+  if (role === 'recibe') {
+    if (busy(before) || busy(after)) return { score: 12, note: 'encadena con sus turnos' }
+    const l = freeRun(before, -1)
+    const r = freeRun(after, 1)
+    if (l && r) return { score: -(10 + 2 * Math.min(l, r)), note: `le parte ${l + r + 1} días libres en ${l} + ${r}` }
+    return { score: 0 }
+  }
+  const total = freeRun(before, -1) + freeRun(after, 1)
+  if (total) return { score: 6, note: `amplía sus libres a ${total + 1} días` }
+  if (busy(before) && busy(after)) return { score: -4, note: 'le queda un libre suelto' }
+  return { score: 0 }
+}
+
 // Saldo con un compañero: positivo = me debe días; negativo = le debo yo.
 export function balanceWith(cambios: Cambio[], partnerId: string): number {
   let b = 0
@@ -152,7 +186,7 @@ export function recommend(state: AppState, meId: string, date: string): Recommen
     const mine = hardAndSoft(ctx, me, meAfter)
     const theirs = hardAndSoft(ctx, row, pAfter)
     if (theirs.hard.length) {
-      discard(`a ${p.name.split(',')[1]?.trim() || p.name} le deja ${theirs.hard[0].message}`)
+      discard(`a ${firstName(p.name)} le deja ${theirs.hard[0].message}`)
       continue
     }
     if (mine.hard.length) {
@@ -183,6 +217,11 @@ export function recommend(state: AppState, meId: string, date: string): Recommen
       }
       if (isWeekend(r) === isWeekend(date)) score += 5
       if (isWeekend(r) && isWeekend(date)) notes.push('finde por finde')
+      const myFit = fitScore(ctx, meRet, r, type === 'quitar' ? 'recibe' : 'cede')
+      const theirFit = fitScore(ctx, pRet, r, type === 'quitar' ? 'cede' : 'recibe')
+      score += myFit.score + theirFit.score
+      if (myFit.note) notes.push(`a ti: ${myFit.note}`)
+      if (theirFit.note) notes.push(`a ${firstName(p.name)}: ${theirFit.note}`)
       const soft = [...m2.soft, ...p2.soft]
       score -= soft.length * 20
       for (const s of soft) notes.push(`aviso: ${s.message}`)
@@ -208,6 +247,9 @@ export function recommend(state: AppState, meId: string, date: string): Recommen
     if (returns.length) score += 40 + Math.min(returns.length, 10) * 2 + Math.round(returns[0].score / 20)
     score += balance * 10
     score -= softIssues.length * 15
+    const fit = fitScore(ctx, pAfter, date, type === 'quitar' ? 'recibe' : 'cede')
+    score += fit.score
+    if (fit.note) reasons.push(`${fit.note.charAt(0).toUpperCase()}${fit.note.slice(1)}`)
     const run = runAround(ctx, pAfter, date)
     if (run > 3) {
       score -= (run - 3) * 5
@@ -220,6 +262,10 @@ export function recommend(state: AppState, meId: string, date: string): Recommen
   candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
   discarded.sort((a, b) => a.name.localeCompare(b.name))
   return { type, myCode, candidates, discarded }
+}
+
+function firstName(name: string): string {
+  return name.split(',')[1]?.trim() || name
 }
 
 export function allDates(grid: Grid): string[] {

@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { loadVisionSettings, MODELS, saveVisionSettings, type VisionSettings } from '../visionSettings'
 import { emptyState } from '../domain/state'
 import type { AppState, Rules, ShiftCode } from '../domain/types'
 import { clearState, downloadJson } from '../store'
 import { CodeChip, normalize, PersonPicker } from './common'
 import { CodeKindFields } from './ImportView'
 
-type Tab = 'yo' | 'reglas' | 'leyenda' | 'companeros' | 'datos'
+type Tab = 'yo' | 'reglas' | 'leyenda' | 'companeros' | 'imagenes' | 'datos'
 
 export function SettingsView({ state, setState }: { state: AppState; setState: (s: AppState) => void }) {
   const [tab, setTab] = useState<Tab>(state.meId ? 'reglas' : 'yo')
@@ -18,6 +19,7 @@ export function SettingsView({ state, setState }: { state: AppState; setState: (
             ['reglas', 'Reglas'],
             ['leyenda', 'Leyenda'],
             ['companeros', 'Compañeros'],
+            ['imagenes', 'Imágenes'],
             ['datos', 'Datos'],
           ] as [Tab, string][]
         ).map(([k, l]) => (
@@ -30,6 +32,7 @@ export function SettingsView({ state, setState }: { state: AppState; setState: (
       {tab === 'reglas' && <RulesTab rules={state.rules} setRules={(rules) => setState({ ...state, rules })} legend={state.legend} />}
       {tab === 'leyenda' && <LegendTab state={state} setState={setState} />}
       {tab === 'companeros' && <PeopleTab state={state} setState={setState} />}
+      {tab === 'imagenes' && <VisionTab />}
       {tab === 'datos' && <DataTab state={state} setState={setState} />}
     </div>
   )
@@ -172,6 +175,20 @@ function RulesTab({ rules, setRules, legend }: { rules: Rules; setRules: (r: Rul
           </div>
         </div>
       ))}
+      <div className="card">
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={rules.preferChains?.enabled !== false}
+            onChange={(e) => setRules({ ...rules, preferChains: { enabled: e.target.checked } })}
+          />
+          <b>Priorizar encadenar turnos y no partir libres</b>
+        </label>
+        <p className="hint">
+          Ordena primero a quien el turno le queda pegado a otros turnos y deja al final a quien le partiría sus días libres. Solo cambia el orden: no descarta a
+          nadie.
+        </p>
+      </div>
       <p className="hint">Los solapes entre turnos de una misma persona siempre se descartan.</p>
     </>
   )
@@ -258,6 +275,54 @@ function PeopleTab({ state, setState }: { state: AppState; setState: (s: AppStat
         </label>
       ))}
     </>
+  )
+}
+
+function VisionTab() {
+  const [s, setS] = useState<VisionSettings | null>(null)
+  const [draft, setDraft] = useState('')
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    loadVisionSettings().then(setS)
+  }, [])
+  if (!s) return null
+  const save = async (next: VisionSettings, text: string) => {
+    await saveVisionSettings(next)
+    setS(next)
+    setMsg(text)
+  }
+  return (
+    <div className="card">
+      <h2>Lectura de fotos</h2>
+      <p className="hint">
+        Las fotos de la plantilla se leen con la IA de Claude usando tu clave de API de Anthropic. La clave se guarda solo en este dispositivo y no se incluye en
+        las copias de seguridad.
+      </p>
+      <p>{s.apiKey ? `Clave guardada: ${s.apiKey.slice(0, 10)}…${s.apiKey.slice(-4)}` : 'Sin clave.'}</p>
+      <label className="field">
+        <span>{s.apiKey ? 'Cambiar clave' : 'Clave de API'}</span>
+        <input id="api-key-ajustes" type="password" autoComplete="off" value={draft} onChange={(e) => setDraft(e.target.value.trim())} placeholder="sk-ant-…" />
+      </label>
+      <div className="row">
+        <button className="primary" disabled={!draft.startsWith('sk-')} onClick={() => save({ ...s, apiKey: draft }, 'Clave guardada.').then(() => setDraft(''))}>
+          Guardar clave
+        </button>
+        {s.apiKey && (
+          <button className="danger" onClick={() => save({ ...s, apiKey: '' }, 'Clave borrada.')}>
+            Borrar clave
+          </button>
+        )}
+      </div>
+      <label className="field">
+        <span>Modelo</span>
+        <select id="modelo" value={s.model} onChange={(e) => save({ ...s, model: e.target.value }, 'Modelo guardado.')}>
+          {MODELS.map((m) => (
+            <option key={m.id} value={m.id}>{m.label}</option>
+          ))}
+        </select>
+      </label>
+      {msg && <p className="ok">{msg}</p>}
+    </div>
   )
 }
 

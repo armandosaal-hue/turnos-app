@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { readSheet } from 'read-excel-file/universal'
 import { parseCsv, parsePlantilla, type Cell, type ParsedPlantilla } from '../domain/importer'
 import { codeLabel, suggestCode } from '../domain/legend'
@@ -7,8 +7,12 @@ import { analyzeImport, applyImport, unknownCodes, type ImportAnalysis } from '.
 import type { AppState, Kind, ShiftCode } from '../domain/types'
 import { CodeChip } from './common'
 
+// La lectura de fotos (y el cliente de la API) solo se descarga cuando se usa.
+const ImageImport = lazy(() => import('./ImageImport').then((m) => ({ default: m.ImageImport })))
+
 type Step =
   | { s: 'idle' }
+  | { s: 'images'; files: File[] }
   | { s: 'codes'; parsed: ParsedPlantilla; fileName: string; defs: Record<string, ShiftCode> }
   | { s: 'review'; parsed: ParsedPlantilla; fileName: string; analysis: ImportAnalysis }
 
@@ -24,31 +28,52 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const onFile = async (file: File) => {
+  // Tras leer una plantilla (Excel o fotos): códigos nuevos y después diferencias.
+  const next = (parsed: ParsedPlantilla, fileName: string) => {
+    const unknown = unknownCodes(state, parsed)
+    if (unknown.length) {
+      const defs: Record<string, ShiftCode> = {}
+      for (const c of unknown) {
+        const sug = suggestCode(state.legend, c)
+        defs[c] = sug ? { ...state.legend[sug], code: c } : { code: c, name: 'Sin descripción', kind: 'ausencia', confirmed: true }
+      }
+      setStep({ s: 'codes', parsed, fileName, defs })
+    } else {
+      setStep({ s: 'review', parsed, fileName, analysis: analyzeImport(state, parsed) })
+    }
+  }
+
+  const onFiles = async (list: FileList) => {
     setError('')
+    const files = [...list]
+    const images = files.filter((f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic)$/i.test(f.name))
+    if (images.length) {
+      if (images.length !== files.length) setError('Has mezclado fotos con otros archivos: se cargan solo las fotos.')
+      setStep({ s: 'images', files: images })
+      return
+    }
+    const file = files[0]
+    if (!file) return
     setBusy(true)
     try {
       let rows: Cell[][]
       if (/\.csv$/i.test(file.name)) rows = parseCsv(await file.text())
       else if (/\.xlsx$/i.test(file.name)) rows = (await readSheet(file)) as Cell[][]
-      else throw new Error('Formato no admitido. Usa .xlsx o .csv (los .xls antiguos: ábrelos y guárdalos como .xlsx).')
-      const parsed = parsePlantilla(rows)
-      const unknown = unknownCodes(state, parsed)
-      if (unknown.length) {
-        const defs: Record<string, ShiftCode> = {}
-        for (const c of unknown) {
-          const sug = suggestCode(state.legend, c)
-          defs[c] = sug ? { ...state.legend[sug], code: c } : { code: c, name: 'Sin descripción', kind: 'ausencia', confirmed: true }
-        }
-        setStep({ s: 'codes', parsed, fileName: file.name, defs })
-      } else {
-        setStep({ s: 'review', parsed, fileName: file.name, analysis: analyzeImport(state, parsed) })
-      }
+      else throw new Error('Formato no admitido. Usa fotos (JPG, PNG), .xlsx o .csv (los .xls antiguos: ábrelos y guárdalos como .xlsx).')
+      next(parsePlantilla(rows), file.name)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
+  }
+
+  if (step.s === 'images') {
+    return (
+      <Suspense fallback={<div className="empty">Cargando…</div>}>
+        <ImageImport files={step.files} state={state} onCancel={() => setStep({ s: 'idle' })} onParsed={next} />
+      </Suspense>
+    )
   }
 
   if (step.s === 'codes') {
@@ -165,16 +190,23 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
     <div className="view">
       <div className="card">
         <h2>Cargar plantilla</h2>
-        <p className="hint">Excel (.xlsx) o CSV. Si el periodo ya está cargado, verás solo las diferencias.</p>
+        <p className="hint">
+          Fotos de la plantilla (puedes elegir varias a la vez, también las de WhatsApp), Excel (.xlsx) o CSV. Si el periodo ya está cargado, verás solo las
+          diferencias.
+        </p>
         <label className="file">
           <input
             id="plantilla"
             type="file"
-            accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            accept="image/*,.xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            multiple
             disabled={busy}
-            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+            onChange={(e) => {
+              if (e.target.files?.length) onFiles(e.target.files)
+              e.target.value = ''
+            }}
           />
-          {busy ? 'Leyendo…' : 'Elegir archivo'}
+          {busy ? 'Leyendo…' : 'Elegir archivos'}
         </label>
         <p className="hint">Si no se abre el selector de archivos (pasa en la app de Claude en Android), abre esta página en Chrome.</p>
         {error && <p className="warn">{error}</p>}

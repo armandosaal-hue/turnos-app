@@ -9,6 +9,7 @@ export function defaultRules(): Rules {
     forbiddenSequences: { enabled: true, hard: true, items: [] },
     maxConsecutiveWorkDays: { enabled: false, hard: true, value: 6 },
     maxConsecutiveNights: { enabled: false, hard: true, value: 4 },
+    preferChains: { enabled: true },
   }
 }
 

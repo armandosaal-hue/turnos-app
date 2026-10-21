@@ -206,3 +206,32 @@ describe('cambios y versiones', () => {
     expect(s.cambios.find((c) => c.id === c4.id)?.notReflected).toBe(true)
   })
 })
+
+describe('encadenar turnos y no partir libres', () => {
+  it('pone por delante a quien encadena que a quien le queda un turno suelto entre libres', () => {
+    const s = state({
+      //     1 2 3 4 5
+      YO: '  L L _ L L',
+      ANA: ' L L L L L', // un diurno el 3 le parte 5 libres
+      BEA: ' L _ L L L', // un diurno el 3 encadena con el del 2
+    })
+    const r = recommend(s, 'YO', day(3))
+    expect(r.candidates.map((c) => c.personId)).toEqual(['BEA', 'ANA'])
+    expect(r.candidates[0].reasons.join(' ')).toMatch(/Encadena/)
+    expect(r.candidates[1].reasons.join(' ')).toMatch(/parte 5 días libres en 2 \+ 2/)
+  })
+
+  it('cuenta el descanso tras noche como parte del bloque de trabajo', () => {
+    const s = state({ YO: 'L L L _ L', ANA: 'L N D L L' })
+    // ANA: N el 2, saliente el 3; un diurno el 4 encadena con el bloque N-D.
+    expect(recommend(s, 'YO', day(4)).candidates[0].reasons.join(' ')).toMatch(/Encadena/)
+  })
+
+  it('se puede desactivar', () => {
+    const rules = defaultRules()
+    rules.preferChains = { enabled: false }
+    const s = state({ YO: 'L L _ L L', ANA: 'L L L L L', BEA: 'L _ L L L' }, { rules })
+    const r = recommend(s, 'YO', day(3))
+    expect(r.candidates.every((c) => !c.reasons.join(' ').match(/Encadena|parte/))).toBe(true)
+  })
+})
