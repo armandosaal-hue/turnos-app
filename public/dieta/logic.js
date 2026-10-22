@@ -166,6 +166,72 @@ export function redondear(gramos) {
   return gramos < 30 ? Math.round(gramos) : Math.round(gramos / 5) * 5
 }
 
+// ---------- Equivalencias por macro principal ----------
+
+// Gramos de un alimento que aportan `objetivoMacro` gramos del macro `macro`.
+// Devuelve también el peso cocido (si hay datos), la medida casera y lo que aporta de los otros macros.
+export function equivalencia(alimento, macro, objetivoMacro) {
+  if (!(objetivoMacro > 0) || !(alimento[macro] > 0)) return null
+  const gramos = (objetivoMacro * 100) / alimento[macro]
+  const r = { gramos: redondear(gramos), exacto: gramos }
+  if (alimento.cocido && alimento.cocido[macro] > 0) r.cocido = redondear((objetivoMacro * 100) / alimento.cocido[macro])
+  if (alimento.medida) r.medidas = gramos / alimento.medida.g
+  const aporte = macrosDe(alimento, gramos)
+  r.extra = Object.fromEntries(MACROS.filter((k) => k !== macro).map((k) => [k, aporte[k]]))
+  return r
+}
+
+// Lista de equivalencias de un grupo, incluidos los alimentos que también cuentan en ese grupo.
+export function equivalencias(alimentos, macro, objetivoMacro) {
+  return alimentos
+    .filter((a) => a.grupo === macro || a.tambien === macro)
+    .map((a) => ({ alimento: a, secundario: a.grupo !== macro, eq: equivalencia(a, macro, objetivoMacro) }))
+    .filter((x) => x.eq)
+}
+
+// Texto de la medida casera: "≈ 2 rebanadas", "≈ 1,5 huevos L".
+export function textoMedida(medida, cantidad) {
+  if (!medida || !(cantidad > 0)) return ''
+  const n = cantidad < 10 ? Math.round(cantidad * 2) / 2 : Math.round(cantidad)
+  if (n === 0) return `menos de ½ ${medida.nombre}`
+  const plural = n === 1 ? medida.nombre : PLURALES[medida.nombre] || medida.nombre + 's'
+  return `≈ ${String(n).replace('.', ',')} ${plural}`
+}
+
+const PLURALES = {
+  'plátano mediano': 'plátanos medianos',
+  'manzana mediana': 'manzanas medianas',
+  'mandarina mediana': 'mandarinas medianas',
+  'dátil sin hueso': 'dátiles sin hueso',
+  'huevo L': 'huevos L',
+  'clara de huevo L': 'claras de huevo L',
+  'aguacate entero': 'aguacates enteros',
+  flan: 'flanes',
+  natillas: 'natillas',
+  yogur: 'yogures',
+}
+
+// ---------- Postres ----------
+
+// Gramos de un postre según cómo se haya anotado (unidades del envase o gramos).
+export function gramosPostre(alimento, item) {
+  if (item.modo === 'unidad' && alimento.medida) return item.cantidad * alimento.medida.g
+  return item.cantidad
+}
+
+// Lo que queda de la comida después de restar los postres. `exceso` indica el macro que el postre supera.
+export function restarPostres(objetivo, postres) {
+  const total = sumar(postres.map(({ alimento, gramos }) => macrosDe(alimento, gramos)))
+  const resta = {}
+  const exceso = {}
+  for (const k of MACROS) {
+    const r = objetivo[k] - total[k]
+    resta[k] = Math.max(0, r)
+    if (r < -0.5) exceso[k] = -r
+  }
+  return { postre: total, resta, exceso }
+}
+
 // Propuesta completa para un objetivo y tres alimentos elegidos.
 export function proponer(objetivo, alimentos) {
   const gramos = calcularGramos(objetivo, alimentos).map(redondear)

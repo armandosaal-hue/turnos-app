@@ -1,5 +1,5 @@
 // Caché de la app de dieta para usarla sin conexión. Los datos están en localStorage, no aquí.
-const CACHE = 'dieta-v1'
+const CACHE = 'dieta-v2'
 const ARCHIVOS = ['./', './index.html', './app.js', './logic.js', './alimentos.js', './manifest.webmanifest']
 
 self.addEventListener('install', (e) => {

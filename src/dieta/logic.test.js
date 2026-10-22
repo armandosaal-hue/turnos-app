@@ -1,4 +1,4 @@
-import { leerDieta, calcularGramos, proponer } from '../../public/dieta/logic.js'
+import { leerDieta, calcularGramos, proponer, equivalencia, equivalencias, textoMedida, gramosPostre, restarPostres } from '../../public/dieta/logic.js'
 import { ALIMENTOS } from '../../public/dieta/alimentos.js'
 
 const al = (id) => ALIMENTOS.find((a) => a.id === id)
@@ -64,5 +64,53 @@ describe('proponer', () => {
     expect(Math.abs(r.diferencia.hc)).toBeLessThan(5)
     expect(Math.abs(r.diferencia.p)).toBeLessThan(5)
     expect(Math.abs(r.diferencia.g)).toBeLessThan(2)
+  })
+})
+
+describe('equivalencias', () => {
+  it('calcula gramos en seco y cocido para el macro principal', () => {
+    const eq = equivalencia(al('arroz'), 'hc', 60)
+    // 60 g de HC / 80 g por 100 g de arroz seco = 75 g; cocido: 60 / 28,2 = 212,8 → 215
+    expect(eq.gramos).toBe(75)
+    expect(eq.cocido).toBe(215)
+    expect(eq.extra.p).toBeCloseTo(5.35, 1)
+  })
+
+  it('incluye los alimentos de doble grupo en su grupo secundario', () => {
+    const lista = equivalencias(ALIMENTOS, 'p', 30)
+    const lentejas = lista.find((x) => x.alimento.id === 'lentejas')
+    expect(lentejas.secundario).toBe(true)
+    expect(lista.some((x) => x.alimento.id === 'arroz')).toBe(false)
+  })
+
+  it('da la medida casera', () => {
+    const eq = equivalencia(al('pan-integral'), 'hc', 30)
+    expect(textoMedida(al('pan-integral').medida, eq.medidas)).toBe('≈ 2 rebanadas')
+    expect(textoMedida({ nombre: 'huevo L', g: 50 }, 3)).toBe('≈ 3 huevos L')
+  })
+})
+
+describe('postres', () => {
+  it('resta el postre del objetivo y avisa del exceso', () => {
+    const yogur = ALIMENTOS.find((a) => a.off === '8480000209085')
+    const g = gramosPostre(yogur, { modo: 'unidad', cantidad: 1 })
+    expect(g).toBe(120)
+    const r = restarPostres({ hc: 50, p: 10, g: 15 }, [{ alimento: yogur, gramos: g }])
+    expect(r.resta.p).toBe(0)
+    expect(r.exceso.p).toBeCloseTo(2, 0)
+    expect(r.resta.hc).toBeCloseTo(50 - 3.72, 1)
+  })
+})
+
+describe('datos de alimentos', () => {
+  it('cada alimento tiene macros válidos, fuente e identificador único', () => {
+    const ids = new Set()
+    for (const a of ALIMENTOS) {
+      expect(ids.has(a.id)).toBe(false)
+      ids.add(a.id)
+      for (const k of ['hc', 'p', 'g']) expect(a[k]).toBeGreaterThanOrEqual(0)
+      expect(a.hc + a.p + a.g).toBeLessThanOrEqual(100.5)
+      expect(Boolean(a.fdc) !== Boolean(a.off)).toBe(true)
+    }
   })
 })
