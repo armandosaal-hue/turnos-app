@@ -1,6 +1,6 @@
 // Caché de la app de dieta para usarla sin conexión. Los datos están en localStorage, no aquí.
-const CACHE = 'dieta-v3'
-const ARCHIVOS = ['./', './index.html', './app.js', './logic.js', './alimentos.js', './manifest.webmanifest']
+const CACHE = 'dieta-v4'
+const ARCHIVOS = ['./', './index.html', './app.js', './logic.js', './alimentos.js', './manifest.webmanifest', './icon-192.png', './icon-512.png']
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)))
