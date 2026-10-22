@@ -1,7 +1,7 @@
 import { ALIMENTOS } from './alimentos.js'
 import {
-  COMIDAS, NOMBRE_COMIDA, MACROS, leerDieta, kcal, proponer, nombreMacro,
-  equivalencias, textoMedida, gramosPostre, restarPostres, macrosDe,
+  COMIDAS, NOMBRE_COMIDA, MACROS, leerDieta, kcal, nombreMacro, redondear,
+  equivalencias, textoMedida, gramosPostre, restarPostres, macrosDe, resumenPlato,
 } from './logic.js'
 
 const CLAVE = 'mi-dieta-v2'
@@ -14,13 +14,6 @@ const EJEMPLO = {
 const CON_POSTRE = ['comida', 'cena']
 const GRUPO = { hc: 'Hidratos', p: 'Proteína', g: 'Grasa' }
 const CADENAS = { generico: 'Genéricos', mercadona: 'Mercadona', ahorramas: 'Ahorramas', lidl: 'Lidl', alcampo: 'Alcampo', propio: 'Míos' }
-const POR_DEFECTO_AJUSTE = {
-  desayuno: { hc: 'avena', p: 'claras', g: 'crema-cacahuete' },
-  comida: { hc: 'arroz', p: 'pollo', g: 'aceite' },
-  merienda: { hc: 'tortitas-arroz', p: 'yogur-griego-0', g: 'nueces' },
-  cena: { hc: 'patata', p: 'bacalao', g: 'aceite' },
-}
-
 // ---------- Estado ----------
 function cargar() {
   try {
@@ -32,7 +25,7 @@ function cargar() {
   return {}
 }
 const estado = Object.assign(
-  { dieta: null, texto: '', comida: 'comida', grupo: 'hc', cadena: 'todos', favoritos: [], postres: {}, propios: [], ajuste: {}, vista: 'equiv' },
+  { dieta: null, texto: '', comida: 'comida', grupo: 'hc', cadena: 'todos', favoritos: [], postres: {}, plato: {}, propios: [], vista: 'equiv' },
   cargar(),
 )
 function guardar() {
@@ -56,21 +49,6 @@ function postresDe(comida) {
   return (estado.postres[comida] || []).map((it) => ({ it, alimento: porId(it.id) })).filter((x) => x.alimento)
 }
 
-// Objetivo de la comida y lo que queda tras el postre.
-function situacion() {
-  const objetivo = dieta()[estado.comida]
-  const ps = postresDe(estado.comida).map(({ it, alimento }) => ({ alimento, gramos: gramosPostre(alimento, it) }))
-  return { objetivo, ...restarPostres(objetivo, ps), hayPostre: ps.length > 0 }
-}
-
-function tiles(m, extra = {}) {
-  return (
-    MACROS.map(
-      (k) => `<div class="macro ${k}"><span class="label">${GRUPO[k]}</span><b>${fmt(m[k])} g</b>${extra[k] || ''}</div>`,
-    ).join('') + `<div class="macro"><span class="label">Energía</span><b>${Math.round(kcal(m))}</b><span>kcal</span></div>`
-  )
-}
-
 // ---------- Cabecera ----------
 function pintarComidas() {
   const d = dieta()
@@ -90,19 +68,70 @@ $('meals').addEventListener('click', (e) => {
 })
 $('ir-cargar').addEventListener('click', () => mostrar('dieta'))
 
-// ---------- Equivalencias ----------
+// ---------- Plato de la comida ----------
+// Elementos del plato: [{ id, grupo, fijo }]. `grupo` es el macro que cubre; `fijo` son gramos puestos a mano.
+function platoDe(comida) {
+  return (estado.plato[comida] || []).map((it) => ({ it, alimento: porId(it.id) })).filter((x) => x.alimento)
+}
+
+// Situación de la comida con unos elementos dados (sirve también para simular un alimento nuevo).
+function calcular(items, postres) {
+  const objetivo = dieta()[estado.comida]
+  const fijos = [
+    ...postres.map(({ it, alimento }) => ({ alimento, gramos: gramosPostre(alimento, it) })),
+    ...items.filter(({ it }) => it.fijo != null).map(({ it, alimento }) => ({ alimento, gramos: it.fijo })),
+  ]
+  const autosIdx = items.map((x, i) => (x.it.fijo == null ? i : -1)).filter((i) => i >= 0)
+  const autos = autosIdx.map((i) => ({ alimento: items[i].alimento, grupo: items[i].it.grupo }))
+  const r = resumenPlato(objetivo, fijos, autos)
+  const gramos = items.map(({ it }) => it.fijo)
+  autosIdx.forEach((i, j) => (gramos[i] = r.gramos[j]))
+  const postre = postres.length ? restarPostres(objetivo, fijos.slice(0, postres.length)).postre : { hc: 0, p: 0, g: 0 }
+  return { objetivo, ...r, gramos, postre }
+}
+
+function situacion() {
+  return calcular(platoDe(estado.comida), postresDe(estado.comida))
+}
+
+// Casillas de resumen: llevas X de Y, barra y lo que queda.
+function resumen(objetivo, total) {
+  const casilla = (clase, etiqueta, lleva, meta, unidad) => {
+    const dif = meta - lleva
+    const pct = meta > 0 ? Math.min(100, (lleva / meta) * 100) : 0
+    const queda = Math.abs(dif) < (unidad === 'kcal' ? 15 : 2) ? '<span class="queda ok">cuadrado</span>'
+      : dif > 0 ? `<span class="queda">quedan ${fmt(dif, unidad === 'kcal' ? 0 : 1)}${unidad === 'kcal' ? '' : ' g'}</span>`
+      : `<span class="queda off">+${fmt(-dif, unidad === 'kcal' ? 0 : 1)}${unidad === 'kcal' ? '' : ' g'} de más</span>`
+    return `<div class="macro ${clase}"><span class="label">${etiqueta}</span><b>${fmt(lleva, unidad === 'kcal' ? 0 : 1)}</b><span class="de">de ${fmt(meta, 0)} ${unidad}</span>
+      <div class="bar-wrap"><div class="fill" style="width:${pct}%"></div></div>${queda}</div>`
+  }
+  return MACROS.map((k) => casilla(k, GRUPO[k], total[k], objetivo[k], 'g')).join('') + casilla('', 'Energía', kcal(total), kcal(objetivo), 'kcal')
+}
+
 function pintarEquiv() {
   const s = situacion()
-  $('obj-titulo').textContent = `Objetivo de la ${NOMBRE_COMIDA[estado.comida].toLowerCase()}`
-  $('objetivo').innerHTML = tiles(s.objetivo)
+  $('obj-titulo').textContent = `Llevas en la ${NOMBRE_COMIDA[estado.comida].toLowerCase()}`
+  $('obj-kcal').textContent = ''
+  $('objetivo').innerHTML = resumen(s.objetivo, s.total)
+  $('mini').innerHTML =
+    'Llevas ' +
+    MACROS.map((k) => `<span class="${k}">${k === 'hc' ? 'HC' : k.toUpperCase()} ${fmt(s.total[k], 0)}/${fmt(s.objetivo[k], 0)}</span>`).join('') +
+    `<span>${Math.round(kcal(s.total))}/${Math.round(kcal(s.objetivo))} kcal</span>`
+  const ex = Object.entries(s.exceso)
+  $('exceso').hidden = !ex.length
+  $('exceso').textContent = ex.length
+    ? `Te pasas de ${ex.map(([k, v]) => `${nombreMacro(k)} en ${fmt(v)} g`).join(' y ')}. Quita o cambia algún alimento, o baja la cantidad de uno fijado.`
+    : ''
 
   const conPostre = CON_POSTRE.includes(estado.comida)
   $('panel-postre').hidden = !conPostre
   if (conPostre) pintarPostres(s)
+  pintarPlato(s)
 
   const resta = s.resta
+  const cuantas = Object.fromEntries(MACROS.map((k) => [k, equivalencias(todos(), k, 1).length]))
   $('tabs').innerHTML = MACROS.map(
-    (k) => `<button class="tab ${k}" role="tab" data-grupo="${k}" aria-selected="${k === estado.grupo}">${GRUPO[k]}<small>${fmt(resta[k])} g</small></button>`,
+    (k) => `<button class="tab ${k}" role="tab" data-grupo="${k}" aria-selected="${k === estado.grupo}">${GRUPO[k]}<small>${resta[k] > 0.5 ? `quedan ${fmt(resta[k])} g` : 'cubierto'}</small><small class="n">${cuantas[k]} opciones</small></button>`,
   ).join('')
 
   const opciones = ['todos', 'favoritos', ...Object.keys(CADENAS).filter((c) => c !== 'propio' || estado.propios.length)]
@@ -112,17 +141,66 @@ function pintarEquiv() {
   pintarLista()
 }
 
-function pintarLista() {
-  const { resta } = situacion()
-  const k = estado.grupo
-  const objetivo = resta[k]
-  if (!(objetivo > 0.5)) {
-    $('lista').innerHTML = `<div class="covered">Ya tienes cubiertos los ${GRUPO[k].toLowerCase()} de esta comida.</div>`
-    $('nota-lista').textContent = ''
-    return
+function pintarPlato(s) {
+  const items = platoDe(estado.comida)
+  $('plato-vacio').hidden = items.length > 0
+  $('vaciar').hidden = !items.length
+  $('plato').innerHTML = items
+    .map(({ it, alimento: a }, i) => {
+      const g = s.gramos[i]
+      const m = macrosDe(a, g)
+      const sub = [
+        a.cocido && a.cocido[it.grupo] > 0 && g > 0 ? `cocido ≈ ${redondear((g * a[it.grupo]) / a.cocido[it.grupo])} g` : '',
+        a.medida && g > 0 ? textoMedida(a.medida, g / a.medida.g) : '',
+      ].filter(Boolean)
+      const etiqueta = a.cocido ? a.estado || 'seco' : 'g'
+      return `<div class="dish">
+        <span class="bar ${it.grupo}"></span>
+        <div class="name"><b>${esc(a.nombre)}</b>
+          <span class="meta">${cadenaDe(a) !== 'generico' ? `<span class="tag">${CADENAS[cadenaDe(a)]}</span>` : ''}<span>${fmt(m.p)} P · ${fmt(m.hc)} HC · ${fmt(m.g)} G · ${Math.round(kcal(m))} kcal</span></span></div>
+        <div><div class="grams">${fmt(g, 0)}<small>${esc(etiqueta)}</small></div>${sub.map((t) => `<div class="sub">${esc(t)}</div>`).join('')}</div>
+        <div class="dish-ctl">
+          <button class="mini" data-pmenos="${i}" aria-label="Menos">− 5 g</button>
+          <button class="mini" data-pmas="${i}" aria-label="Más">+ 5 g</button>
+          ${it.fijo != null ? `<span class="badge fijo">fijado</span><button class="mini" data-pauto="${i}">Ajustar solo</button>` : '<span class="badge">ajustado</span>'}
+          <button class="mini rm" data-pquitar="${i}">Quitar</button>
+        </div>
+      </div>`
+    })
+    .join('')
+}
+
+$('plato').addEventListener('click', (e) => {
+  const b = e.target.closest('button')
+  if (!b) return
+  const lista = estado.plato[estado.comida] || []
+  const s = situacion()
+  const i = Number(b.dataset.pmenos ?? b.dataset.pmas ?? b.dataset.pauto ?? b.dataset.pquitar)
+  const it = lista[i]
+  if (!it) return
+  if (b.dataset.pquitar !== undefined) lista.splice(i, 1)
+  else if (b.dataset.pauto !== undefined) it.fijo = null
+  else {
+    const actual = s.gramos[i] || 0
+    it.fijo = Math.max(0, Math.round(actual / 5) * 5 + (b.dataset.pmas !== undefined ? 5 : -5))
   }
+  estado.plato[estado.comida] = lista
+  guardar()
+  pintar()
+})
+$('vaciar').addEventListener('click', () => {
+  estado.plato[estado.comida] = []
+  guardar()
+  pintar()
+})
+
+function pintarLista() {
+  const k = estado.grupo
+  const items = platoDe(estado.comida)
+  const postres = postresDe(estado.comida)
+  const s = calcular(items, postres)
   const q = norm($('buscar').value.trim())
-  let filas = equivalencias(todos(), k, objetivo).filter(({ alimento: a }) => {
+  let filas = equivalencias(todos(), k, 1).filter(({ alimento: a }) => {
     if (estado.cadena === 'favoritos' && !esFav(a.id)) return false
     if (!['todos', 'favoritos'].includes(estado.cadena) && cadenaDe(a) !== estado.cadena) return false
     return !q || norm(`${a.nombre} ${CADENAS[cadenaDe(a)]}`).includes(q)
@@ -130,35 +208,43 @@ function pintarLista() {
   // Favoritos arriba; los alimentos que cuentan sobre todo en otro grupo, al final.
   const rango = (f) => (esFav(f.alimento.id) ? 0 : f.secundario ? 2 : 1)
   filas = [0, 1, 2].flatMap((r) => filas.filter((f) => rango(f) === r))
-  if (!filas.length) {
-    $('lista').innerHTML = `<div class="empty">${estado.cadena === 'favoritos' ? 'Aún no tienes favoritos. Toca la estrella de un alimento para tenerlo arriba.' : 'No hay alimentos con ese filtro.'}</div>`
-  } else {
-    $('lista').innerHTML = filas.map(({ alimento: a, secundario, eq }) => filaEquiv(a, k, secundario, eq)).join('')
-  }
-  $('nota-lista').textContent = `${filas.length} opciones para ${fmt(objetivo)} g de ${GRUPO[k].toLowerCase()}. Cada una cubre ese macro sola; debajo ves lo que aporta de los otros.`
+  const enPlato = new Set(items.map(({ it }) => it.id))
+  const html = filas.map(({ alimento: a, secundario }) => {
+    // Simula el plato con este alimento añadido para saber cuántos gramos le tocarían.
+    const sim = enPlato.has(a.id) ? null : calcular([...items, { it: { id: a.id, grupo: k, fijo: null }, alimento: a }], postres)
+    const g = sim ? sim.gramos[sim.gramos.length - 1] : null
+    return filaOpcion(a, k, secundario, g, enPlato.has(a.id))
+  })
+  $('lista').innerHTML = html.length
+    ? (s.resta[k] <= 0.5 ? `<div class="covered">Ya tienes cubiertos los ${GRUPO[k].toLowerCase()} de esta comida.</div>` : '') + html.join('')
+    : `<div class="empty">${estado.cadena === 'favoritos' ? 'Aún no tienes favoritos. Toca la estrella de un alimento para tenerlo arriba.' : 'No hay alimentos con ese filtro.'}</div>`
+  $('nota-lista').textContent = `${filas.length} opciones de ${GRUPO[k].toLowerCase()}. Los gramos son los que le tocarían si lo añades ahora, ya reajustado con lo que tienes en el plato.`
 }
 
-function filaEquiv(a, k, secundario, eq) {
+function filaOpcion(a, k, secundario, g, yaEsta) {
   const cad = cadenaDe(a)
-  const otros = Object.entries(eq.extra)
-    .filter(([, v]) => v >= 0.5)
-    .map(([m, v]) => `${fmt(v, 0)} g ${m === 'hc' ? 'HC' : m === 'p' ? 'prot.' : 'grasa'}`)
-    .join(' · ')
+  const m = g ? macrosDe(a, g) : null
+  const otros = m
+    ? MACROS.filter((x) => x !== k && m[x] >= 0.5).map((x) => `${fmt(m[x], 0)} g ${x === 'hc' ? 'HC' : x === 'p' ? 'prot.' : 'grasa'}`).join(' · ')
+    : ''
   const meta = [
     a.estado && !a.cocido ? esc(a.estado) : '',
     cad !== 'generico' ? `<span class="tag">${CADENAS[cad]}</span>` : '',
     secundario ? `<span class="tag also">cuenta como ${GRUPO[a.grupo].toLowerCase()}</span>` : '',
     otros ? `<span>también ${otros}</span>` : '',
   ].filter(Boolean).join('')
-  const etiqueta = a.cocido ? (a.estado || 'seco') : 'g'
-  const lineas = [
-    a.cocido && eq.cocido ? `<span class="cooked">cocido ≈ ${eq.cocido} g</span>` : '',
-    a.medida ? `<span>${esc(textoMedida(a.medida, eq.medidas))}</span>` : '',
-  ].join('')
+  const etiqueta = a.cocido ? a.estado || 'seco' : 'g'
+  const lineas = g
+    ? [
+        a.cocido && a.cocido[k] > 0 ? `<span class="cooked">cocido ≈ ${redondear((g * a[k]) / a.cocido[k])} g</span>` : '',
+        a.medida ? `<span>${esc(textoMedida(a.medida, g / a.medida.g))}</span>` : '',
+      ].join('')
+    : ''
+  const cantidad = yaEsta ? '<span>en el plato</span>' : g ? `<b>${g}<small>${esc(etiqueta)}</small></b>${lineas}` : '<span>no hace falta</span>'
   return `<div class="item">
     <button class="star" data-fav="${esc(a.id)}" aria-pressed="${esFav(a.id)}" aria-label="Favorito">★</button>
     <div class="info"><b>${esc(a.nombre)}</b><div class="meta">${meta}</div></div>
-    <div class="amount"><b>${eq.gramos}<small>${a.cocido ? esc(etiqueta) : 'g'}</small></b>${lineas}</div>
+    <div class="amount">${cantidad}<button class="addbtn" data-add="${esc(a.id)}" ${yaEsta ? 'disabled' : ''}>${yaEsta ? '✓' : '+ Añadir'}</button></div>
   </div>`
 }
 
@@ -178,6 +264,15 @@ $('cadenas').addEventListener('click', (e) => {
 })
 $('buscar').addEventListener('input', pintarLista)
 $('lista').addEventListener('click', (e) => {
+  const add = e.target.closest('[data-add]')
+  if (add) {
+    const lista = estado.plato[estado.comida] || []
+    lista.push({ id: add.dataset.add, grupo: estado.grupo, fijo: null })
+    estado.plato[estado.comida] = lista
+    guardar()
+    pintar()
+    return
+  }
   const b = e.target.closest('[data-fav]')
   if (!b) return
   const id = b.dataset.fav
@@ -202,15 +297,6 @@ function pintarPostres(s) {
     })
     .join('')
   $('postre-total').textContent = items.length ? `${Math.round(kcal(s.postre))} kcal` : 'Opcional'
-  $('resta-wrap').hidden = !items.length
-  if (items.length) {
-    $('resta').innerHTML = tiles(s.resta)
-    const ex = Object.entries(s.exceso)
-    $('exceso').hidden = !ex.length
-    $('exceso').textContent = ex.length
-      ? `El postre supera tu objetivo de ${ex.map(([k, v]) => `${nombreMacro(k)} en ${fmt(v)} g`).join(' y ')}.`
-      : ''
-  }
 }
 
 $('postres').addEventListener('click', (e) => {
@@ -282,64 +368,6 @@ $('lista-postres').addEventListener('click', (e) => {
   $('sheet').hidden = true
   pintar()
 })
-
-// ---------- Ajuste fino ----------
-function opcionesSelect(k, elegido) {
-  const lista = todos().filter((a) => a.grupo === k)
-  return Object.keys(CADENAS)
-    .map((c) => {
-      const grupo = lista.filter((a) => cadenaDe(a) === c)
-      if (!grupo.length) return ''
-      return `<optgroup label="${CADENAS[c]}">${grupo
-        .map((a) => `<option value="${esc(a.id)}"${a.id === elegido ? ' selected' : ''}>${esc(a.nombre)}${a.estado ? ` (${esc(a.estado)})` : ''}</option>`)
-        .join('')}</optgroup>`
-    })
-    .join('')
-}
-
-function eleccionAjuste() {
-  const e = { ...POR_DEFECTO_AJUSTE[estado.comida], ...(estado.ajuste[estado.comida] || {}) }
-  for (const k of MACROS) if (!porId(e[k])) e[k] = POR_DEFECTO_AJUSTE[estado.comida][k]
-  return e
-}
-
-function pintarAjuste() {
-  const el = eleccionAjuste()
-  for (const k of MACROS) $(`sel-${k}`).innerHTML = opcionesSelect(k, el[k])
-  const s = situacion()
-  const trio = MACROS.map((k) => porId(el[k]))
-  const r = proponer(s.resta, trio)
-  const postres = postresDe(estado.comida)
-  $('plate').innerHTML =
-    trio
-      .map(
-        (a, i) => `<div class="row"><span class="bar ${MACROS[i]}"></span>
-        <div class="name"><b>${esc(a.nombre)}</b><span>${esc(a.estado || CADENAS[cadenaDe(a)])}${a.medida && r.gramos[i] ? ' · ' + esc(textoMedida(a.medida, r.gramos[i] / a.medida.g)) : ''}</span></div>
-        <div class="grams">${r.gramos[i]}<small>g</small></div></div>`,
-      )
-      .join('') +
-    postres
-      .map(({ it, alimento: a }) => `<div class="row"><span class="bar postre"></span><div class="name"><b>${esc(a.nombre)}</b><span>postre</span></div><div class="grams">${fmt(gramosPostre(a, it), 0)}<small>g</small></div></div>`)
-      .join('')
-  const total = { hc: r.total.hc + s.postre.hc, p: r.total.p + s.postre.p, g: r.total.g + s.postre.g }
-  const lejos = MACROS.filter((k) => Math.abs(total[k] - s.objetivo[k]) > 3)
-  const extra = Object.fromEntries(
-    MACROS.map((k) => {
-      const d = total[k] - s.objetivo[k]
-      return [k, `<span class="${lejos.includes(k) ? 'off' : ''}">${Math.abs(d) < 0.5 ? 'exacto' : (d > 0 ? '+' : '') + fmt(d) + ' g'}</span>`]
-    }),
-  )
-  $('check').innerHTML = tiles(total, extra)
-  $('aviso-plato').hidden = !lejos.length
-  $('aviso-plato').textContent = lejos.length ? `Con esta combinación no cuadra la ${lejos.map(nombreMacro).join(' ni la ')}. Prueba otro alimento.` : ''
-}
-for (const k of MACROS) {
-  $(`sel-${k}`).addEventListener('change', (e) => {
-    estado.ajuste[estado.comida] = { ...eleccionAjuste(), [k]: e.target.value }
-    guardar()
-    pintarAjuste()
-  })
-}
 
 // ---------- Mi dieta ----------
 let borrador = null
@@ -440,11 +468,10 @@ $('form-alimento').addEventListener('submit', (e) => {
 })
 
 // ---------- Navegación ----------
-const VISTAS = ['equiv', 'ajuste', 'dieta', 'alimentos']
+const VISTAS = ['equiv', 'dieta', 'alimentos']
 function pintar() {
   pintarComidas()
   if (estado.vista === 'equiv') pintarEquiv()
-  if (estado.vista === 'ajuste') pintarAjuste()
 }
 function mostrar(vista) {
   estado.vista = vista
@@ -454,6 +481,7 @@ function mostrar(vista) {
     $(`nav-${v}`).setAttribute('aria-pressed', String(v === vista))
   }
   $('meals').hidden = vista === 'dieta' || vista === 'alimentos'
+  $('mini').hidden = vista !== 'equiv'
   if (vista === 'dieta') {
     $('texto').value = estado.texto || ''
     borrador = null

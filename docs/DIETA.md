@@ -4,14 +4,17 @@ App web instalable en `public/dieta/`. Se publica con el resto del proyecto en G
 
 ## Pantallas
 
-1. **Equivalencias.** Se elige la comida. Arriba aparece su objetivo de hidratos, proteína y grasa. En comida y cena hay un hueco de postre: uno o varios postres, en unidades del envase o en gramos, que se restan del objetivo. Debajo, para cada macro, la lista de alimentos con los gramos que cubren lo que queda: peso seco o crudo y, en arroces, pastas, cereales, legumbres y tubérculos, también el peso cocido aproximado. Si la fuente da el peso de una medida casera, se muestra («≈ 2 rebanadas»). Cada fila indica lo que el alimento aporta de los otros macros. Hay buscador, filtro por origen (genéricos, Mercadona, Ahorramas, Lidl, Alcampo, propios) y favoritos.
-2. **Ajuste fino.** Un alimento de cada grupo; la app reparte los gramos para cuadrar los tres macros a la vez (mínimos cuadrados no negativos ponderados en kcal 4/4/9), descontando el postre.
-3. **Mi dieta.** Se pega el texto de la dieta («HC 60, P 30, G 15», «60 g de hidratos», una línea por macro o tres números en orden HC/P/G) y se revisa en una tabla antes de guardar.
-4. **Alimentos.** Tabla con fuente de cada alimento y formulario para añadir productos propios con los datos de la etiqueta.
+1. **Comida.** Se elige la comida. Arriba, lo que llevas frente al objetivo (hidratos, proteína, grasa y kcal) y lo que queda. En comida y cena hay hueco de postre (uno o varios, en unidades o gramos). Debajo, **Tu plato**: los alimentos que añades desde las listas de hidratos, proteína y grasa. La app reparte los gramos de todo el plato a la vez: cada alimento cubre su macro y se descuenta lo que aportan los demás (si el arroz trae proteína, el pollo baja). Una cantidad se puede fijar con ±5 g y el resto se reajusta. Cada opción de la lista muestra los gramos que le tocarían si se añade en ese momento, con peso cocido y medida casera cuando hay dato. Buscador, filtro por origen y favoritos.
+2. **Mi dieta.** Se pega el texto de la dieta («HC 60, P 30, G 15», «60 g de hidratos», una línea por macro o tres números en orden HC/P/G) y se revisa en una tabla antes de guardar.
+3. **Alimentos.** Tabla con fuente de cada alimento y formulario para añadir productos propios con los datos de su etiqueta.
 
-## Cálculo de equivalencias
+## Ajuste del plato
 
-Gramos = objetivo del macro × 100 / gramos del macro por 100 g del alimento. Se calcula solo por el macro principal. Legumbres, frutos secos, crema de cacahuete, huevo y queso curado aparecen también en su segundo grupo, marcados. Los gramos se redondean de 1 en 1 por debajo de 30 g y de 5 en 5 por encima.
+Para los alimentos no fijados se resuelve un sistema lineal: cada alimento del grupo k cubre una parte igual de (objetivo_k − lo que aportan postre, alimentos fijados y alimentos de otros grupos). Si a algún alimento le saldría cantidad negativa, se pone a 0 g y se vuelve a resolver. Los gramos se redondean (de 1 en 1 por debajo de 30 g, de 5 en 5 por encima) y el resumen se calcula con los gramos redondeados.
+
+## Equivalencias
+
+Con el plato vacío, gramos = objetivo del macro × 100 / gramos del macro por 100 g del alimento. Se calcula solo por el macro principal. Legumbres, frutos secos, crema de cacahuete, huevo y queso curado aparecen también en su segundo grupo, marcados. Los gramos se redondean de 1 en 1 por debajo de 30 g y de 5 en 5 por encima.
 
 ## Datos
 

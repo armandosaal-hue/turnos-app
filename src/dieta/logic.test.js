@@ -1,4 +1,4 @@
-import { leerDieta, calcularGramos, proponer, equivalencia, equivalencias, textoMedida, gramosPostre, restarPostres } from '../../public/dieta/logic.js'
+import { leerDieta, calcularGramos, proponer, equivalencia, equivalencias, textoMedida, gramosPostre, restarPostres, ajustarPlato, resumenPlato } from '../../public/dieta/logic.js'
 import { ALIMENTOS } from '../../public/dieta/alimentos.js'
 
 const al = (id) => ALIMENTOS.find((a) => a.id === id)
@@ -112,5 +112,51 @@ describe('datos de alimentos', () => {
       expect(a.hc + a.p + a.g).toBeLessThanOrEqual(100.5)
       expect(Boolean(a.fdc) !== Boolean(a.off)).toBe(true)
     }
+  })
+})
+
+describe('plato', () => {
+  const obj = { hc: 80, p: 45, g: 20 }
+
+  it('con solo pollo cubre la proteína', () => {
+    const [x] = ajustarPlato(obj, [], [{ alimento: al('pollo'), grupo: 'p' }])
+    expect(x).toBeCloseTo((45 * 100) / 22.5, 5)
+  })
+
+  it('al añadir arroz descuenta su proteína del pollo', () => {
+    const solo = ajustarPlato(obj, [], [{ alimento: al('pollo'), grupo: 'p' }])[0]
+    const [pollo, arroz] = ajustarPlato(obj, [], [
+      { alimento: al('pollo'), grupo: 'p' },
+      { alimento: al('arroz'), grupo: 'hc' },
+    ])
+    expect(arroz).toBeCloseTo(100, 5) // 80 g HC / 0,80
+    expect(pollo).toBeCloseTo(solo - (arroz * 7.13) / 22.5, 5)
+  })
+
+  it('cuadra los tres macros con postre fijo', () => {
+    const flan = ALIMENTOS.find((a) => a.off === '8480000676351')
+    const fijos = [{ alimento: flan, gramos: 100 }]
+    const autos = [
+      { alimento: al('pollo'), grupo: 'p' },
+      { alimento: al('arroz'), grupo: 'hc' },
+      { alimento: al('aceite'), grupo: 'g' },
+    ]
+    const x = ajustarPlato(obj, fijos, autos)
+    const total = (k) => (flan[k] * 100) / 100 + autos.reduce((s, a, i) => s + (a.alimento[k] * x[i]) / 100, 0)
+    for (const k of ['hc', 'p', 'g']) expect(total(k)).toBeCloseTo(obj[k], 5)
+  })
+
+  it('reparte un grupo entre dos alimentos y no da gramos negativos', () => {
+    const autos = [
+      { alimento: al('pollo'), grupo: 'p' },
+      { alimento: al('pavo'), grupo: 'p' },
+      { alimento: al('salmon'), grupo: 'p' },
+      { alimento: al('aceite'), grupo: 'g' },
+    ]
+    const x = ajustarPlato({ hc: 0, p: 45, g: 5 }, [], autos)
+    expect(x.every((v) => v >= 0)).toBe(true)
+    expect(x[3]).toBe(0) // el salmón ya trae más grasa de la pedida
+    const r = resumenPlato({ hc: 0, p: 45, g: 5 }, [], autos)
+    expect(r.exceso.g).toBeGreaterThan(0)
   })
 })

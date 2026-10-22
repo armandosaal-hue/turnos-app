@@ -232,6 +232,78 @@ export function restarPostres(objetivo, postres) {
   return { postre: total, resta, exceso }
 }
 
+// ---------- Plato ----------
+
+// Resuelve A·x = b (A cuadrada) por eliminación gaussiana. Devuelve null si es singular.
+function resolver(A, b) {
+  const n = b.length
+  const M = A.map((fila, i) => [...fila, b[i]])
+  for (let i = 0; i < n; i++) {
+    let piv = i
+    for (let r = i + 1; r < n; r++) if (Math.abs(M[r][i]) > Math.abs(M[piv][i])) piv = r
+    if (Math.abs(M[piv][i]) < 1e-12) return null
+    ;[M[i], M[piv]] = [M[piv], M[i]]
+    for (let r = 0; r < n; r++) {
+      if (r === i) continue
+      const f = M[r][i] / M[i][i]
+      for (let c = i; c <= n; c++) M[r][c] -= f * M[i][c]
+    }
+  }
+  return M.map((fila, i) => fila[n] / fila[i])
+}
+
+// Gramos de los alimentos automáticos de un plato.
+// `fijos`: [{alimento, gramos}] (postres y cantidades que el usuario ha fijado).
+// `autos`: [{alimento, grupo}]: cada uno cubre su macro `grupo`; si hay varios del mismo grupo, se lo reparten a partes iguales.
+// Lo que aportan los demás alimentos a ese macro se descuenta. Si a un grupo no le queda nada, sus alimentos van a 0 g.
+export function ajustarPlato(objetivo, fijos, autos) {
+  const base = sumar(fijos.map(({ alimento, gramos }) => macrosDe(alimento, gramos)))
+  const x = autos.map(() => 0)
+  let activos = autos.map((_, i) => i)
+  for (let vuelta = 0; vuelta <= autos.length && activos.length; vuelta++) {
+    const n = activos.length
+    const A = activos.map(() => Array(n).fill(0))
+    const b = Array(n).fill(0)
+    activos.forEach((i, fila) => {
+      const k = autos[i].grupo
+      const mismos = activos.filter((j) => autos[j].grupo === k)
+      // macro_k(i)·x_i = (objetivo_k − fijos_k − Σ macro_k(j)·x_j de otros grupos) / nº de alimentos del grupo
+      A[fila][fila] = (autos[i].alimento[k] / 100) * mismos.length
+      activos.forEach((j, col) => {
+        if (autos[j].grupo !== k) A[fila][col] += autos[j].alimento[k] / 100
+      })
+      b[fila] = objetivo[k] - base[k]
+    })
+    const sol = resolver(A, b)
+    if (!sol) break
+    const negativos = activos.filter((_, f) => sol[f] < 0)
+    activos.forEach((i, f) => (x[i] = Math.max(0, sol[f])))
+    if (!negativos.length) break
+    // El que más se pasa de negativo se queda a 0 y se vuelve a resolver con el resto.
+    const peor = negativos.reduce((a, i) => (sol[activos.indexOf(i)] < sol[activos.indexOf(a)] ? i : a))
+    x[peor] = 0
+    activos = activos.filter((i) => i !== peor)
+  }
+  return x
+}
+
+// Plato completo con gramos redondeados (lo que se pesa), total, lo que queda y exceso.
+export function resumenPlato(objetivo, fijos, autos) {
+  const gramos = ajustarPlato(objetivo, fijos, autos).map(redondear)
+  const total = sumar([
+    ...fijos.map(({ alimento, gramos: g }) => macrosDe(alimento, g)),
+    ...autos.map(({ alimento }, i) => macrosDe(alimento, gramos[i])),
+  ])
+  const resta = {}
+  const exceso = {}
+  for (const k of MACROS) {
+    const r = objetivo[k] - total[k]
+    resta[k] = Math.max(0, r)
+    if (r < -2) exceso[k] = -r
+  }
+  return { gramos, total, resta, exceso }
+}
+
 // Propuesta completa para un objetivo y tres alimentos elegidos.
 export function proponer(objetivo, alimentos) {
   const gramos = calcularGramos(objetivo, alimentos).map(redondear)

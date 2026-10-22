@@ -96,6 +96,7 @@ h2 { font: 600 1.15rem/1.2 var(--display); margin: 0; text-wrap: balance; }
 .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 4px; }
 .tab { border: 0; background: none; border-radius: 10px; padding: 8px 4px; cursor: pointer; display: grid; gap: 0; font-weight: 700; font-size: .88rem; color: var(--muted); }
 .tab small { font: 600 .8rem var(--display); font-variant-numeric: tabular-nums; }
+.tab small.n { font-weight: 500; opacity: .8; }
 .tab[aria-selected="true"].hc { background: var(--hc-soft); color: var(--hc); }
 .tab[aria-selected="true"].p { background: var(--p-soft); color: var(--p); }
 .tab[aria-selected="true"].g { background: var(--g-soft); color: var(--g); }
@@ -166,7 +167,7 @@ footer a { color: inherit; }
 /* Navegación inferior */
 nav.bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; background: var(--surface); border-top: 1px solid var(--line);
   padding: 6px max(10px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px)); }
-nav.bottom .in { max-width: 600px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+nav.bottom .in { max-width: 600px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 nav.bottom button { border: 0; background: none; border-radius: 12px; padding: 6px 2px; cursor: pointer; display: grid; justify-items: center; gap: 2px; font-size: .72rem; font-weight: 600; color: var(--muted); }
 nav.bottom svg { width: 22px; height: 22px; }
 nav.bottom button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
@@ -180,6 +181,35 @@ nav.bottom button[aria-pressed="true"] { color: var(--accent); background: var(-
 .sheet .item:hover { background: var(--surface-2); }
 .close { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 6px 12px; cursor: pointer; font-weight: 600; }
 
+
+/* Resumen y plato */
+.mini-sum { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 600 .82rem var(--display); font-variant-numeric: tabular-nums; color: var(--muted); }
+.mini-sum:empty { display: none; }
+.mini-sum .hc { color: var(--hc); } .mini-sum .p { color: var(--p); } .mini-sum .g { color: var(--g); }
+.macro .bar-wrap { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 5px; }
+.macro .fill { height: 100%; border-radius: 3px; background: currentColor; }
+.macro .fill { color: var(--muted); }
+.macro.hc .fill { color: var(--hc); } .macro.p .fill { color: var(--p); } .macro.g .fill { color: var(--g); }
+.macro .de { color: var(--muted); font: 500 .75rem var(--display); font-variant-numeric: tabular-nums; }
+.macro .queda { font: 600 .74rem var(--display); color: var(--ink); }
+.macro .queda.ok { color: var(--accent); } .macro .queda.off { color: var(--warn); }
+.dish { display: grid; grid-template-columns: 6px 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.dish:last-child { border-bottom: 0; }
+.dish .name { min-width: 0; display: grid; gap: 2px; }
+.dish .name b { font-weight: 600; }
+.dish .grams { font: 700 1.6rem/1 var(--display); font-variant-numeric: tabular-nums; text-align: right; }
+.dish .grams small { font-size: .78rem; font-weight: 500; color: var(--muted); margin-left: 2px; }
+.dish .sub { font-size: .76rem; color: var(--muted); text-align: right; }
+.dish-ctl { grid-column: 2 / -1; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.mini { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: .8rem; font-weight: 600; }
+.mini.rm { color: var(--p); border-color: transparent; background: none; padding-inline: 4px; }
+.badge { font-size: .7rem; font-weight: 700; border-radius: 6px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); }
+.badge.fijo { background: var(--warn-bg); color: var(--warn); }
+.link { border: 0; background: none; color: var(--p); cursor: pointer; font-size: .82rem; font-weight: 600; padding: 0; }
+.addbtn { border: 0; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 5px 10px; cursor: pointer; font-size: .8rem; }
+.addbtn[disabled] { background: var(--surface-2); color: var(--muted); cursor: default; }
+.amount .addbtn { margin-top: 4px; }
+
 @media (max-width: 380px) { .macros { grid-template-columns: repeat(2, 1fr); } }
 @media (prefers-reduced-motion: no-preference) { .chip, .meal, .tab, nav.bottom button, .star { transition: background-color .15s, color .15s, border-color .15s; } }
 </style>
@@ -189,6 +219,7 @@ nav.bottom button[aria-pressed="true"] { color: var(--accent); background: var(-
   <header class="top">
     <div class="brand"><h1>Mi dieta</h1><small id="sub"></small></div>
     <div class="meals" id="meals" role="group" aria-label="Comida"></div>
+    <div class="mini-sum" id="mini" aria-live="polite"></div>
   </header>
 
   <div id="banner-ejemplo" class="banner" hidden>Cifras de ejemplo. <button id="ir-cargar">Carga tu dieta</button> para ver tus gramos.</div>
@@ -196,19 +227,21 @@ nav.bottom button[aria-pressed="true"] { color: var(--accent); background: var(-
   <!-- Equivalencias -->
   <section id="vista-equiv" class="stack">
     <div class="panel">
-      <div class="panel-head"><span class="label" id="obj-titulo">Objetivo</span></div>
+      <div class="panel-head"><span class="label" id="obj-titulo">Objetivo</span><span class="help" id="obj-kcal"></span></div>
       <div class="macros" id="objetivo"></div>
+      <p class="warn-text" id="exceso" hidden></p>
     </div>
 
     <div class="panel" id="panel-postre" hidden>
       <div class="panel-head"><h2>Postre</h2><span class="help" id="postre-total"></span></div>
       <div class="dessert-list" id="postres"></div>
       <button class="add" id="add-postre">+ Añadir postre</button>
-      <div id="resta-wrap" class="stack" hidden>
-        <span class="label">Te queda para el plato</span>
-        <div class="macros" id="resta"></div>
-        <p class="warn-text" id="exceso" hidden></p>
-      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Tu plato</h2><button class="link" id="vaciar" hidden>Vaciar</button></div>
+      <div class="plate" id="plato"></div>
+      <p class="help" id="plato-vacio">Añade alimentos desde las listas de abajo. Cada uno cubre su macro y la app reajusta los gramos de todo el plato descontando lo que aporta cada alimento.</p>
     </div>
 
     <div class="tabs" role="tablist" id="tabs"></div>
@@ -220,21 +253,6 @@ nav.bottom button[aria-pressed="true"] { color: var(--accent); background: var(-
     <p class="help" id="nota-lista"></p>
   </section>
 
-  <!-- Ajuste fino -->
-  <section id="vista-ajuste" class="stack" hidden>
-    <div class="panel">
-      <h2>Ajuste fino</h2>
-      <p class="help">Elige un alimento de cada grupo y la app reparte los gramos para cuadrar los tres macros a la vez, descontando el postre.</p>
-      <div class="pick"><label for="sel-hc">Hidratos</label><select id="sel-hc"></select></div>
-      <div class="pick"><label for="sel-p">Proteína</label><select id="sel-p"></select></div>
-      <div class="pick"><label for="sel-g">Grasa</label><select id="sel-g"></select></div>
-    </div>
-    <div class="panel">
-      <div class="plate" id="plate"></div>
-      <div class="macros" id="check"></div>
-      <p class="warn-text" id="aviso-plato" hidden></p>
-    </div>
-  </section>
 
   <!-- Mi dieta -->
   <section id="vista-dieta" class="panel" hidden>
@@ -288,10 +306,7 @@ nav.bottom button[aria-pressed="true"] { color: var(--accent); background: var(-
   <div class="in">
     <button id="nav-equiv" data-vista="equiv" aria-pressed="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M5 7h14M7 7l-3 6a3 3 0 0 0 6 0L7 7zM17 7l-3 6a3 3 0 0 0 6 0l-3-6z"/></svg>
-      Equivalencias</button>
-    <button id="nav-ajuste" data-vista="ajuste" aria-pressed="false">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-      Ajuste fino</button>
+      Comida</button>
     <button id="nav-dieta" data-vista="dieta" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
       Mi dieta</button>
