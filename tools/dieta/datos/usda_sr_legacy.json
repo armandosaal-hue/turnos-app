@@ -531,6 +531,15 @@
   "fib": 0.0
  },
  {
+  "id": 171265,
+  "d": "Milk, whole, 3.25% milkfat, with added vitamin D",
+  "p": 3.15,
+  "g": 3.25,
+  "hc": 4.8,
+  "kcal": 61.0,
+  "fib": 0.0
+ },
+ {
   "id": 171269,
   "d": "Milk, nonfat, fluid, with added vitamin A and vitamin D (fat free or skim)",
   "p": 3.37,

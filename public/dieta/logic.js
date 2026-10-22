@@ -198,6 +198,17 @@ export function textoMedida(medida, cantidad) {
   return `≈ ${String(n).replace('.', ',')} ${plural}`
 }
 
+// Volumen de un líquido: "≈ 290 ml (1,2 vasos de 250 ml)". Solo para alimentos con densidad (`ml`, en g/ml).
+export const VASO_ML = 250
+export function textoVolumen(alimento, gramos) {
+  if (!alimento.ml || !(gramos > 0)) return ''
+  const ml = gramos / alimento.ml
+  const redondo = ml < 30 ? Math.round(ml) : Math.round(ml / 5) * 5
+  if (ml < 100) return `≈ ${redondo} ml`
+  const vasos = Math.round((ml / VASO_ML) * 10) / 10
+  return `≈ ${redondo} ml (${String(vasos).replace('.', ',')} ${vasos === 1 ? 'vaso' : 'vasos'} de ${VASO_ML} ml)`
+}
+
 const PLURALES = {
   'plátano mediano': 'plátanos medianos',
   'manzana mediana': 'manzanas medianas',

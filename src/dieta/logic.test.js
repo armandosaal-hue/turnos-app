@@ -1,4 +1,4 @@
-import { leerDieta, calcularGramos, proponer, equivalencia, equivalencias, textoMedida, gramosPostre, restarPostres, ajustarPlato, resumenPlato } from '../../public/dieta/logic.js'
+import { leerDieta, calcularGramos, proponer, equivalencia, equivalencias, textoMedida, gramosPostre, restarPostres, ajustarPlato, resumenPlato, textoVolumen } from '../../public/dieta/logic.js'
 import { ALIMENTOS } from '../../public/dieta/alimentos.js'
 
 const al = (id) => ALIMENTOS.find((a) => a.id === id)
@@ -158,5 +158,16 @@ describe('plato', () => {
     expect(x[3]).toBe(0) // el salmón ya trae más grasa de la pedida
     const r = resumenPlato({ hc: 0, p: 45, g: 5 }, [], autos)
     expect(r.exceso.g).toBeGreaterThan(0)
+  })
+})
+
+describe('líquidos', () => {
+  it('da la equivalencia en mililitros y vasos', () => {
+    const leche = al('leche-desnatada')
+    expect(leche.ml).toBeCloseTo(1.035, 3)
+    // 300 g / 1,035 g/ml = 289,9 ml → 290 ml; 290 / 250 = 1,2 vasos
+    expect(textoVolumen(leche, 300)).toBe('≈ 290 ml (1,2 vasos de 250 ml)')
+    expect(textoVolumen(al('aceite'), 11)).toBe('≈ 12 ml')
+    expect(textoVolumen(al('pollo'), 100)).toBe('')
   })
 })
