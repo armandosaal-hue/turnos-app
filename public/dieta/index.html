@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Mi Dieta Macros</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<meta name="theme-color" content="#2d6a4f" />
+<meta name="description" content="Equivalencias de alimentos para cuadrar los macros de cada comida" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="icon" href="./icon-192.png" />
+<link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Figtree:wght@400;500;600;700&display=swap" />
+<style>
+/* Layout: columna estrecha tipo báscula de cocina. Arriba la comida y su objetivo, en medio el postre, abajo las equivalencias; navegación fija al pie. */
+:root {
+  --bg: #f2f5f1; --surface: #ffffff; --surface-2: #f7f9f6; --ink: #1b2420; --muted: #5a6861; --line: #dbe3dd;
+  --accent: #2d6a4f; --accent-ink: #ffffff; --accent-soft: #e1eee6;
+  --hc: #a86f08; --hc-soft: #fbf0d9; --p: #ad4436; --p-soft: #f9e4e0; --g: #577519; --g-soft: #ebf1dc;
+  --warn: #8f5300; --warn-bg: #fff2d8; --star: #c28a00; --scrim: rgba(10, 20, 15, .45);
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --nav-h: 64px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101612; --surface: #19211c; --surface-2: #1e2722; --ink: #e6ece8; --muted: #98a79f; --line: #2a352f;
+    --accent: #72c198; --accent-ink: #0d1a13; --accent-soft: #1f3329;
+    --hc: #e5ad42; --hc-soft: #3a2f17; --p: #ec8476; --p-soft: #3b2420; --g: #a9c75f; --g-soft: #283219;
+    --warn: #f0b860; --warn-bg: #33270f; --star: #f0c040; --scrim: rgba(0, 0, 0, .6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101612; --surface: #19211c; --surface-2: #1e2722; --ink: #e6ece8; --muted: #98a79f; --line: #2a352f;
+  --accent: #72c198; --accent-ink: #0d1a13; --accent-soft: #1f3329;
+  --hc: #e5ad42; --hc-soft: #3a2f17; --p: #ec8476; --p-soft: #3b2420; --g: #a9c75f; --g-soft: #283219;
+  --warn: #f0b860; --warn-bg: #33270f; --star: #f0c040; --scrim: rgba(0, 0, 0, .6);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app { max-width: 600px; margin: 0 auto; padding-block: 10px calc(var(--nav-h) + 28px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 14px; }
+.stack { display: grid; gap: 14px; min-width: 0; }
+
+/* Cabecera y comidas */
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 6px 8px; display: grid; gap: 10px; }
+.brand { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+h1 { font: 700 1.55rem/1 var(--display); margin: 0; letter-spacing: .01em; }
+.brand small { color: var(--muted); font-size: .8rem; }
+h2 { font: 600 1.15rem/1.2 var(--display); margin: 0; text-wrap: balance; }
+.meals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.meal { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 7px 2px; cursor: pointer; display: grid; gap: 1px; text-align: center; font-weight: 600; font-size: .82rem; }
+.meal small { color: var(--muted); font: 500 .74rem var(--display); font-variant-numeric: tabular-nums; }
+.meal[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+.banner { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 10px 12px; font-size: .88rem; }
+.banner button { background: none; border: 0; color: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.label { font: 600 .68rem var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.macros { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.macro { border-radius: 10px; padding: 8px 10px; display: grid; gap: 0; background: var(--surface-2); min-width: 0; }
+.macro.hc { background: var(--hc-soft); } .macro.p { background: var(--p-soft); } .macro.g { background: var(--g-soft); }
+.macro b { font: 700 1.3rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.macro.hc b { color: var(--hc); } .macro.p b { color: var(--p); } .macro.g b { color: var(--g); }
+.macro .label { font-size: .62rem; }
+.macro span:last-child { color: var(--muted); font: 500 .75rem var(--display); }
+.macro .off { color: var(--warn); font-weight: 700; }
+
+/* Postre */
+.dessert-list { display: grid; gap: 8px; }
+.dessert-list:empty { display: none; }
+.dessert { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 8px 10px; border-radius: 12px; background: var(--surface-2); }
+.dessert .name { min-width: 0; }
+.dessert .name b { display: block; font-weight: 600; font-size: .92rem; }
+.dessert .name span { color: var(--muted); font-size: .78rem; }
+.qty { display: flex; align-items: center; gap: 4px; }
+.qty button { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-weight: 700; }
+.qty output { min-width: 3.6em; text-align: center; font: 600 .95rem var(--display); font-variant-numeric: tabular-nums; }
+.dessert .rm { grid-column: 1 / -1; justify-self: start; border: 0; background: none; color: var(--p); font-size: .8rem; cursor: pointer; padding: 0; }
+.add { border: 1.5px dashed var(--line); background: none; border-radius: 12px; padding: 10px; cursor: pointer; color: var(--accent); font-weight: 700; }
+.warn-text { color: var(--warn); font-weight: 600; font-size: .86rem; margin: 0; }
+
+/* Equivalencias */
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 4px; }
+.tab { border: 0; background: none; border-radius: 10px; padding: 8px 4px; cursor: pointer; display: grid; gap: 0; font-weight: 700; font-size: .88rem; color: var(--muted); }
+.tab small { font: 600 .8rem var(--display); font-variant-numeric: tabular-nums; }
+.tab small.n { font-weight: 500; opacity: .8; }
+.tab[aria-selected="true"].hc { background: var(--hc-soft); color: var(--hc); }
+.tab[aria-selected="true"].p { background: var(--p-soft); color: var(--p); }
+.tab[aria-selected="true"].g { background: var(--g-soft); color: var(--g); }
+.filters { display: grid; gap: 8px; min-width: 0; }
+.search { width: 100%; font: 15px var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; min-width: 0; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: .82rem; font-weight: 600; cursor: pointer; color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.list { display: grid; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; min-width: 0; }
+.item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 11px 12px; border-bottom: 1px solid var(--line); }
+.item:last-child { border-bottom: 0; }
+.star { border: 0; background: none; cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--line); padding: 4px; }
+.star[aria-pressed="true"] { color: var(--star); }
+.item .info { min-width: 0; display: grid; gap: 2px; }
+.item .info b { font-weight: 600; font-size: .95rem; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; color: var(--muted); font-size: .76rem; }
+.tag { border-radius: 6px; padding: 1px 6px; background: var(--surface-2); border: 1px solid var(--line); font-size: .7rem; font-weight: 600; color: var(--muted); }
+.tag.also { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.amount { text-align: right; display: grid; gap: 1px; justify-items: end; }
+.amount b { font: 700 1.55rem/1 var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.amount b small { font-size: .78rem; font-weight: 500; color: var(--muted); margin-left: 3px; }
+.amount span { font-size: .74rem; color: var(--muted); white-space: nowrap; }
+.amount .cooked { color: var(--ink); font-weight: 600; }
+.empty { padding: 18px; color: var(--muted); text-align: center; font-size: .9rem; }
+.covered { padding: 18px; color: var(--accent); font-weight: 600; text-align: center; }
+
+/* Ajuste fino */
+.pick { display: grid; gap: 4px; }
+.pick label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+select, textarea, .field { width: 100%; font: 15px var(--body); color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; }
+.plate { display: grid; }
+.row { display: grid; grid-template-columns: 6px 1fr auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.bar { width: 6px; height: 34px; border-radius: 3px; }
+.bar.hc { background: var(--hc); } .bar.p { background: var(--p); } .bar.g { background: var(--g); } .bar.postre { background: var(--muted); }
+.row .name { min-width: 0; }
+.row .name b { display: block; font-weight: 600; }
+.row .name span { color: var(--muted); font-size: .8rem; }
+.grams { font: 700 1.8rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.grams small { font-size: .9rem; font-weight: 500; color: var(--muted); margin-left: 2px; }
+
+/* Mi dieta y alimentos */
+textarea { min-height: 160px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+.btn { border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 11px 16px; border-radius: 11px; cursor: pointer; justify-self: start; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ok { color: var(--accent); font-weight: 600; font-size: .9rem; }
+.notes { margin: 0; padding-left: 18px; color: var(--warn); font-size: .88rem; }
+.help { color: var(--muted); font-size: .86rem; margin: 0; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 4px; border-bottom: 1px solid var(--line); font-size: .86rem; vertical-align: top; }
+th { font: 600 .66rem var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+td input { width: 3.8em; padding: 6px; text-align: right; font: 15px var(--body); color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; }
+td.kc { color: var(--muted); }
+.food-table td:nth-child(2), .food-table td:nth-child(3), .food-table td:nth-child(4),
+.food-table th:nth-child(2), .food-table th:nth-child(3), .food-table th:nth-child(4) { text-align: right; }
+.food-table a { color: var(--muted); font-size: .74rem; }
+.food-table td small { color: var(--muted); }
+.del { border: 0; background: none; color: var(--p); cursor: pointer; font-size: .8rem; padding: 0; }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.form label { display: grid; gap: 3px; font-size: .78rem; color: var(--muted); }
+.form .wide { grid-column: 1 / -1; }
+.form .check { display: flex; gap: 8px; align-items: center; align-self: end; padding-bottom: 8px; font-size: .86rem; color: var(--ink); }
+footer { color: var(--muted); font-size: .76rem; }
+footer a { color: inherit; }
+
+/* Navegación inferior */
+nav.bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; background: var(--surface); border-top: 1px solid var(--line);
+  padding: 6px max(10px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px)); }
+nav.bottom .in { max-width: 600px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+nav.bottom button { border: 0; background: none; border-radius: 12px; padding: 6px 2px; cursor: pointer; display: grid; justify-items: center; gap: 2px; font-size: .72rem; font-weight: 600; color: var(--muted); }
+nav.bottom svg { width: 22px; height: 22px; }
+nav.bottom button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+
+/* Hoja de postres */
+.sheet-bg { position: fixed; inset: 0; z-index: 20; background: var(--scrim); display: grid; align-items: end; }
+.sheet { background: var(--bg); border-radius: 20px 20px 0 0; max-height: 86vh; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 10px; width: 100%; max-width: 640px; margin: 0 auto;
+  padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.sheet .list { overflow-y: auto; }
+.sheet .item { grid-template-columns: 1fr auto; cursor: pointer; text-align: left; width: 100%; border-left: 0; border-right: 0; border-top: 0; background: none; }
+.sheet .item:hover { background: var(--surface-2); }
+.close { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 6px 12px; cursor: pointer; font-weight: 600; }
+
+
+/* Resumen y plato */
+.mini-sum { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 600 .82rem var(--display); font-variant-numeric: tabular-nums; color: var(--muted); }
+.mini-sum:empty { display: none; }
+.mini-sum .hc { color: var(--hc); } .mini-sum .p { color: var(--p); } .mini-sum .g { color: var(--g); }
+.macro .bar-wrap { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 5px; }
+.macro .fill { height: 100%; border-radius: 3px; background: currentColor; }
+.macro .fill { color: var(--muted); }
+.macro.hc .fill { color: var(--hc); } .macro.p .fill { color: var(--p); } .macro.g .fill { color: var(--g); }
+.macro .de { color: var(--muted); font: 500 .75rem var(--display); font-variant-numeric: tabular-nums; }
+.macro .queda { font: 600 .74rem var(--display); color: var(--ink); }
+.macro .queda.ok { color: var(--accent); } .macro .queda.off { color: var(--warn); }
+.dish { display: grid; grid-template-columns: 6px 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.dish:last-child { border-bottom: 0; }
+.dish .name { min-width: 0; display: grid; gap: 2px; }
+.dish .name b { font-weight: 600; }
+.dish .grams { font: 700 1.6rem/1 var(--display); font-variant-numeric: tabular-nums; text-align: right; }
+.dish .grams small { font-size: .78rem; font-weight: 500; color: var(--muted); margin-left: 2px; }
+.dish .sub { font-size: .76rem; color: var(--muted); text-align: right; }
+.dish-ctl { grid-column: 2 / -1; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.mini { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: .8rem; font-weight: 600; }
+.mini.rm { color: var(--p); border-color: transparent; background: none; padding-inline: 4px; }
+.badge { font-size: .7rem; font-weight: 700; border-radius: 6px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); }
+.badge.fijo { background: var(--warn-bg); color: var(--warn); }
+.link { border: 0; background: none; color: var(--p); cursor: pointer; font-size: .82rem; font-weight: 600; padding: 0; }
+.addbtn { border: 0; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 5px 10px; cursor: pointer; font-size: .8rem; }
+.addbtn[disabled] { background: var(--surface-2); color: var(--muted); cursor: default; }
+.amount .addbtn { margin-top: 4px; }
+
+@media (max-width: 380px) { .macros { grid-template-columns: repeat(2, 1fr); } }
+@media (prefers-reduced-motion: no-preference) { .chip, .meal, .tab, nav.bottom button, .star { transition: background-color .15s, color .15s, border-color .15s; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><h1>Mi dieta</h1><small id="sub"></small></div>
+    <div class="meals" id="meals" role="group" aria-label="Comida"></div>
+    <div class="mini-sum" id="mini" aria-live="polite"></div>
+  </header>
+
+  <div id="banner-ejemplo" class="banner" hidden>Cifras de ejemplo. <button id="ir-cargar">Carga tu dieta</button> para ver tus gramos.</div>
+
+  <!-- Equivalencias -->
+  <section id="vista-equiv" class="stack">
+    <div class="panel">
+      <div class="panel-head"><span class="label" id="obj-titulo">Objetivo</span><span class="help" id="obj-kcal"></span></div>
+      <div class="macros" id="objetivo"></div>
+      <p class="warn-text" id="exceso" hidden></p>
+    </div>
+
+    <div class="panel" id="panel-postre" hidden>
+      <div class="panel-head"><h2>Postre</h2><span class="help" id="postre-total"></span></div>
+      <div class="dessert-list" id="postres"></div>
+      <button class="add" id="add-postre">+ Añadir postre</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Tu plato</h2><button class="link" id="vaciar" hidden>Vaciar</button></div>
+      <div class="plate" id="plato"></div>
+      <p class="help" id="plato-vacio">Añade alimentos desde las listas de abajo. Cada uno cubre su macro y la app reajusta los gramos de todo el plato descontando lo que aporta cada alimento.</p>
+    </div>
+
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="filters">
+      <input class="search" id="buscar" type="search" placeholder="Buscar alimento o producto" autocomplete="off" />
+      <div class="chips" id="cadenas" role="group" aria-label="Filtrar por origen"></div>
+    </div>
+    <div class="list" id="lista"></div>
+    <p class="help" id="nota-lista"></p>
+  </section>
+
+
+  <!-- Mi dieta -->
+  <section id="vista-dieta" class="panel" hidden>
+    <h2>Pega tu dieta</h2>
+    <p class="help">Copia el texto con los macros de desayuno, comida, merienda y cena. Vale «HC 60, P 30, G 15», «60 g de hidratos…», una línea por macro o tres números en orden hidratos, proteína, grasa.</p>
+    <textarea id="texto" placeholder="Desayuno: HC 60 g, Proteína 30 g, Grasa 15 g&#10;Comida: HC 80 g, Proteína 45 g, Grasa 20 g&#10;Merienda: HC 30 g, Proteína 25 g, Grasa 10 g&#10;Cena: HC 50 g, Proteína 40 g, Grasa 15 g"></textarea>
+    <div class="actions"><button class="btn" id="leer">Leer texto</button></div>
+    <ul class="notes" id="avisos" hidden></ul>
+    <div class="scroll">
+      <table id="tabla-dieta">
+        <thead><tr><th>Comida</th><th>HC (g)</th><th>Prot. (g)</th><th>Grasa (g)</th><th>kcal</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="actions"><button class="btn" id="guardar">Guardar dieta</button><span class="ok" id="guardado" hidden>Dieta guardada</span></div>
+  </section>
+
+  <!-- Alimentos -->
+  <section id="vista-alimentos" class="stack" hidden>
+    <div class="panel">
+      <h2>Alimentos</h2>
+      <p class="help">Valores por 100 g. Genéricos: USDA FoodData Central, en crudo o seco salvo indicación; sus hidratos incluyen la fibra. Productos: tabla nutricional del envase recogida en Open Food Facts; sus hidratos no incluyen la fibra.</p>
+      <input class="search" id="buscar-al" type="search" placeholder="Buscar" autocomplete="off" />
+      <div class="scroll"><table class="food-table" id="tabla-alimentos">
+        <thead><tr><th>Alimento</th><th>HC</th><th>Prot.</th><th>Grasa</th><th>Fuente</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="panel">
+      <h2>Añadir alimento</h2>
+      <p class="help">Copia los valores por 100 g de la etiqueta. Si el envase trae unidades (un yogur, una lata), indica cuánto pesa una.</p>
+      <form class="form" id="form-alimento">
+        <label class="wide">Nombre<input class="field" id="f-nombre" required maxlength="50" /></label>
+        <label>Grupo
+          <select id="f-grupo"><option value="hc">Hidratos</option><option value="p">Proteína</option><option value="g">Grasa</option></select>
+        </label>
+        <label>Peso por unidad (g, opcional)<input class="field" id="f-unidad" type="number" inputmode="decimal" min="0" step="0.5" /></label>
+        <label>Hidratos / 100 g<input class="field" id="f-hc" type="number" inputmode="decimal" min="0" max="100" step="0.1" required /></label>
+        <label>Proteína / 100 g<input class="field" id="f-p" type="number" inputmode="decimal" min="0" max="100" step="0.1" required /></label>
+        <label>Grasa / 100 g<input class="field" id="f-g" type="number" inputmode="decimal" min="0" max="100" step="0.1" required /></label>
+        <label class="check"><input id="f-postre" type="checkbox" /> Sirve de postre</label>
+        <div class="actions wide"><button class="btn" type="submit">Añadir</button><span class="ok" id="anadido" hidden>Alimento añadido</span></div>
+      </form>
+    </div>
+  </section>
+
+  <footer>Datos: <a href="https://fdc.nal.usda.gov/" target="_blank" rel="noopener">USDA FoodData Central</a> (SR Legacy) y <a href="https://world.openfoodfacts.org/" target="_blank" rel="noopener">Open Food Facts</a> (ODbL). Las cifras son orientativas; tu dietista-nutricionista manda.</footer>
+</div>
+
+<nav class="bottom" aria-label="Secciones">
+  <div class="in">
+    <button id="nav-equiv" data-vista="equiv" aria-pressed="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M5 7h14M7 7l-3 6a3 3 0 0 0 6 0L7 7zM17 7l-3 6a3 3 0 0 0 6 0l-3-6z"/></svg>
+      Comida</button>
+    <button id="nav-dieta" data-vista="dieta" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
+      Mi dieta</button>
+    <button id="nav-alimentos" data-vista="alimentos" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      Alimentos</button>
+  </div>
+</nav>
+
+<div class="sheet-bg" id="sheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="panel-head"><h2 id="sheet-title">Elige postre</h2><button class="close" id="sheet-close">Cerrar</button></div>
+    <div class="filters">
+      <input class="search" id="buscar-postre" type="search" placeholder="Buscar postre" autocomplete="off" />
+      <div class="chips" id="cadenas-postre" role="group" aria-label="Filtrar postres por origen"></div>
+    </div>
+    <div class="list" id="lista-postres"></div>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
