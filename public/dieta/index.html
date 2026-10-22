@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Mi Dieta Macros</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<meta name="theme-color" content="#2d6a4f" />
+<meta name="description" content="Gramos de cada alimento para cuadrar los macros de cada comida" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="icon" href="../icon-192.png" />
+<link rel="apple-touch-icon" href="../icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Figtree:wght@400;500;600&display=swap" />
+<style>
+/* Layout: una columna estrecha tipo báscula de cocina; el número de gramos manda, los macros van en sus tres colores. */
+:root {
+  --bg: #f3f6f2; --surface: #ffffff; --ink: #1b2420; --muted: #5a6861; --line: #dbe3dd;
+  --accent: #2d6a4f; --accent-ink: #ffffff; --accent-soft: #e2efe7;
+  --hc: #b67b0c; --p: #b0463a; --g: #5b7a1a; --warn: #9a5b00; --warn-bg: #fff3dc;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111713; --surface: #1a221d; --ink: #e6ece8; --muted: #98a79f; --line: #2b3630;
+    --accent: #72c198; --accent-ink: #0d1a13; --accent-soft: #1f3329;
+    --hc: #e2a93d; --p: #e57f70; --g: #a6c45c; --warn: #f0b860; --warn-bg: #33270f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111713; --surface: #1a221d; --ink: #e6ece8; --muted: #98a79f; --line: #2b3630;
+  --accent: #72c198; --accent-ink: #0d1a13; --accent-soft: #1f3329;
+  --hc: #e2a93d; --p: #e57f70; --g: #a6c45c; --warn: #f0b860; --warn-bg: #33270f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden] { display: none !important; }
+.app { max-width: 560px; margin: 0 auto; padding-block: 12px 40px; display: grid; gap: 16px; }
+.stack { display: grid; gap: 16px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font: 700 1.6rem/1 var(--display); letter-spacing: .01em; margin: 0; }
+h2 { font: 600 1.15rem/1.2 var(--display); margin: 0; text-wrap: balance; }
+.nav { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.nav button { border: 0; background: none; color: var(--muted); font: 600 .85rem var(--body); padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.nav button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.meals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.meal { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 8px 4px; cursor: pointer; display: grid; gap: 2px; text-align: center; font: 600 .82rem var(--body); }
+.meal small { color: var(--muted); font: 500 .75rem var(--display); font-variant-numeric: tabular-nums; }
+.meal[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+.banner { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 10px 12px; font-size: .88rem; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 12px; }
+.target { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.target div { display: grid; gap: 0; }
+.label { font: 600 .7rem var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.num { font: 600 1.35rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.c-hc { color: var(--hc); } .c-p { color: var(--p); } .c-g { color: var(--g); }
+
+.plate { display: grid; gap: 2px; }
+.row { display: grid; grid-template-columns: 6px 1fr auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.bar { width: 6px; height: 34px; border-radius: 3px; }
+.bar.hc { background: var(--hc); } .bar.p { background: var(--p); } .bar.g { background: var(--g); }
+.row .name { min-width: 0; }
+.row .name b { display: block; font-weight: 600; }
+.row .name span { color: var(--muted); font-size: .8rem; }
+.grams { font: 700 1.9rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.grams small { font-size: .9rem; font-weight: 500; color: var(--muted); margin-left: 2px; }
+
+.check { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-variant-numeric: tabular-nums; font-size: .82rem; color: var(--muted); }
+.check b { color: var(--ink); font: 600 1rem var(--display); display: block; }
+.off { color: var(--warn); font-weight: 600; }
+
+.options { display: grid; gap: 8px; }
+.options h3 { margin: 0; font: 600 .78rem var(--body); letter-spacing: .08em; text-transform: uppercase; }
+.chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 8px 10px; text-align: left; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; font: 500 .85rem var(--body); min-width: 0; }
+.chip span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.chip span:last-child { font: 600 .95rem var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.chip.hc[aria-pressed="true"] span:last-child { color: var(--hc); }
+.chip.p[aria-pressed="true"] span:last-child { color: var(--p); }
+.chip.g[aria-pressed="true"] span:last-child { color: var(--g); }
+
+textarea, input, select { width: 100%; font: 15px var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+textarea { min-height: 170px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+.btn { border: 0; background: var(--accent); color: var(--accent-ink); font: 600 .95rem var(--body); padding: 10px 16px; border-radius: 9px; cursor: pointer; justify-self: start; }
+.btn.ghost { background: none; color: var(--accent); border: 1px solid var(--line); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ok { color: var(--accent); font-weight: 600; font-size: .9rem; }
+.notes { margin: 0; padding-left: 18px; color: var(--warn); font-size: .88rem; }
+.help { color: var(--muted); font-size: .88rem; margin: 0; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: .88rem; }
+th { font: 600 .7rem var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+td input { width: 3.8em; padding: 6px; text-align: right; }
+td.kc { color: var(--muted); }
+.food-table td:nth-child(n+2), .food-table th:nth-child(n+2) { text-align: right; }
+.food-table a { color: var(--muted); font-size: .75rem; }
+.del { border: 0; background: none; color: var(--p); cursor: pointer; font-size: .8rem; }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.form label { display: grid; gap: 3px; font-size: .78rem; color: var(--muted); }
+.form .wide { grid-column: 1 / -1; }
+footer { color: var(--muted); font-size: .78rem; }
+footer a { color: inherit; }
+@media (max-width: 380px) { .target, .check { grid-template-columns: repeat(2, 1fr); } }
+@media (prefers-reduced-motion: no-preference) { .chip, .meal, .nav button { transition: background-color .15s, border-color .15s; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Mi dieta</h1>
+    <nav class="nav" aria-label="Secciones">
+      <button id="nav-plan" data-vista="plan" aria-pressed="true">Comidas</button>
+      <button id="nav-cargar" data-vista="cargar" aria-pressed="false">Cargar dieta</button>
+      <button id="nav-alimentos" data-vista="alimentos" aria-pressed="false">Alimentos</button>
+    </nav>
+  </header>
+
+  <section id="vista-plan" class="stack">
+    <div id="banner-ejemplo" class="banner" hidden>Cifras de ejemplo. Pega tu dieta en «Cargar dieta» para ver tus gramos.</div>
+    <div class="meals" id="meals" role="group" aria-label="Comida"></div>
+    <div class="panel">
+      <div class="target" id="target"></div>
+    </div>
+    <div class="panel">
+      <h2 id="plato-titulo">Tu plato</h2>
+      <div class="plate" id="plate"></div>
+      <div class="check" id="check"></div>
+      <p class="help" id="aviso-plato" hidden></p>
+    </div>
+    <div class="panel options" id="options"></div>
+  </section>
+
+  <section id="vista-cargar" class="panel" hidden>
+    <h2>Pega tu dieta</h2>
+    <p class="help">Copia el texto con los macros de desayuno, comida, merienda y cena. Vale «HC 60, P 30, G 15», «60 g de hidratos…», una línea por macro o tres números seguidos en orden hidratos, proteína, grasa.</p>
+    <textarea id="texto" placeholder="Desayuno: HC 60 g, Proteína 30 g, Grasa 15 g&#10;Comida: HC 80 g, Proteína 45 g, Grasa 20 g&#10;Merienda: HC 30 g, Proteína 25 g, Grasa 10 g&#10;Cena: HC 50 g, Proteína 40 g, Grasa 15 g"></textarea>
+    <div class="actions"><button class="btn" id="leer">Leer texto</button></div>
+    <ul class="notes" id="avisos" hidden></ul>
+    <div class="scroll">
+      <table id="tabla-dieta">
+        <thead><tr><th>Comida</th><th>HC (g)</th><th>Prot. (g)</th><th>Grasa (g)</th><th>kcal</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="actions"><button class="btn" id="guardar">Guardar dieta</button><span class="ok" id="guardado" hidden>Dieta guardada</span></div>
+  </section>
+
+  <section id="vista-alimentos" class="panel" hidden>
+    <h2>Alimentos</h2>
+    <p class="help">Valores por 100 g, peso en crudo salvo indicación. Los hidratos son carbohidratos totales e incluyen la fibra.</p>
+    <div class="scroll"><table class="food-table" id="tabla-alimentos">
+      <thead><tr><th>Alimento</th><th>HC</th><th>Prot.</th><th>Grasa</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <h2>Añadir alimento</h2>
+    <p class="help">Copia los valores por 100 g de la etiqueta del envase.</p>
+    <form class="form" id="form-alimento">
+      <label class="wide">Nombre<input id="f-nombre" required maxlength="40" /></label>
+      <label class="wide">Grupo
+        <select id="f-grupo"><option value="hc">Hidratos</option><option value="p">Proteína</option><option value="g">Grasa</option></select>
+      </label>
+      <label>Hidratos / 100 g<input id="f-hc" type="number" inputmode="decimal" min="0" max="100" step="0.1" required /></label>
+      <label>Proteína / 100 g<input id="f-p" type="number" inputmode="decimal" min="0" max="100" step="0.1" required /></label>
+      <label>Grasa / 100 g<input id="f-g" type="number" inputmode="decimal" min="0" max="100" step="0.1" required /></label>
+      <div class="actions wide"><button class="btn" type="submit">Añadir</button><span class="ok" id="anadido" hidden>Alimento añadido</span></div>
+    </form>
+  </section>
+
+  <footer>Composición de alimentos: <a href="https://fdc.nal.usda.gov/" target="_blank" rel="noopener">USDA FoodData Central</a>, base SR Legacy. Los gramos son orientativos; tu dietista-nutricionista manda.</footer>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
