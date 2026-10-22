@@ -1,7 +1,7 @@
 import { ALIMENTOS } from './alimentos.js'
 import {
   COMIDAS, NOMBRE_COMIDA, MACROS, leerDieta, kcal, nombreMacro, redondear,
-  equivalencias, textoMedida, gramosPostre, restarPostres, macrosDe, resumenPlato,
+  equivalencias, textoMedida, textoVolumen, gramosPostre, restarPostres, macrosDe, resumenPlato,
 } from './logic.js'
 
 const CLAVE = 'mi-dieta-v2'
@@ -110,7 +110,7 @@ function resumen(objetivo, total) {
 
 function pintarEquiv() {
   const s = situacion()
-  $('obj-titulo').textContent = `Llevas en la ${NOMBRE_COMIDA[estado.comida].toLowerCase()}`
+  $('obj-titulo').textContent = `Llevas en ${estado.comida === 'desayuno' ? 'el' : 'la'} ${NOMBRE_COMIDA[estado.comida].toLowerCase()}`
   $('obj-kcal').textContent = ''
   $('objetivo').innerHTML = resumen(s.objetivo, s.total)
   $('mini').innerHTML =
@@ -130,9 +130,11 @@ function pintarEquiv() {
 
   const resta = s.resta
   const cuantas = Object.fromEntries(MACROS.map((k) => [k, equivalencias(todos(), k, 1).length]))
-  $('tabs').innerHTML = MACROS.map(
-    (k) => `<button class="tab ${k}" role="tab" data-grupo="${k}" aria-selected="${k === estado.grupo}">${GRUPO[k]}<small>${resta[k] > 0.5 ? `quedan ${fmt(resta[k])} g` : 'cubierto'}</small><small class="n">${cuantas[k]} opciones</small></button>`,
-  ).join('')
+  $('tabs').innerHTML =
+    `<button class="tab todos" role="tab" data-grupo="todos" aria-selected="${estado.grupo === 'todos'}">Todos<small>buscador</small><small class="n">${opcionesTodos().length} alimentos</small></button>` +
+    MACROS.map(
+      (k) => `<button class="tab ${k}" role="tab" data-grupo="${k}" aria-selected="${k === estado.grupo}">${GRUPO[k]}<small>${resta[k] > 0.5 ? `quedan ${fmt(resta[k])} g` : 'cubierto'}</small><small class="n">${cuantas[k]} opciones</small></button>`,
+    ).join('')
 
   const opciones = ['todos', 'favoritos', ...Object.keys(CADENAS).filter((c) => c !== 'propio' || estado.propios.length)]
   $('cadenas').innerHTML = opciones
@@ -152,6 +154,7 @@ function pintarPlato(s) {
       const sub = [
         a.cocido && a.cocido[it.grupo] > 0 && g > 0 ? `cocido ≈ ${redondear((g * a[it.grupo]) / a.cocido[it.grupo])} g` : '',
         a.medida && g > 0 ? textoMedida(a.medida, g / a.medida.g) : '',
+        textoVolumen(a, g),
       ].filter(Boolean)
       const etiqueta = a.cocido ? a.estado || 'seco' : 'g'
       return `<div class="dish">
@@ -194,13 +197,20 @@ $('vaciar').addEventListener('click', () => {
   pintar()
 })
 
+// Pestaña «Todos»: cada alimento con su grupo principal (los postres genéricos van en su hoja).
+function opcionesTodos() {
+  return todos().filter((a) => MACROS.includes(a.grupo)).map((a) => ({ alimento: a, secundario: false }))
+}
+
 function pintarLista() {
   const k = estado.grupo
+  const enTodos = k === 'todos'
   const items = platoDe(estado.comida)
   const postres = postresDe(estado.comida)
   const s = calcular(items, postres)
   const q = norm($('buscar').value.trim())
-  let filas = equivalencias(todos(), k, 1).filter(({ alimento: a }) => {
+  const base = enTodos ? opcionesTodos() : equivalencias(todos(), k, 1)
+  let filas = base.filter(({ alimento: a }) => {
     if (estado.cadena === 'favoritos' && !esFav(a.id)) return false
     if (!['todos', 'favoritos'].includes(estado.cadena) && cadenaDe(a) !== estado.cadena) return false
     return !q || norm(`${a.nombre} ${CADENAS[cadenaDe(a)]}`).includes(q)
@@ -210,18 +220,22 @@ function pintarLista() {
   filas = [0, 1, 2].flatMap((r) => filas.filter((f) => rango(f) === r))
   const enPlato = new Set(items.map(({ it }) => it.id))
   const html = filas.map(({ alimento: a, secundario }) => {
+    const gk = enTodos ? a.grupo : k
     // Simula el plato con este alimento añadido para saber cuántos gramos le tocarían.
-    const sim = enPlato.has(a.id) ? null : calcular([...items, { it: { id: a.id, grupo: k, fijo: null }, alimento: a }], postres)
+    const sim = enPlato.has(a.id) ? null : calcular([...items, { it: { id: a.id, grupo: gk, fijo: null }, alimento: a }], postres)
     const g = sim ? sim.gramos[sim.gramos.length - 1] : null
-    return filaOpcion(a, k, secundario, g, enPlato.has(a.id))
+    return filaOpcion(a, gk, secundario, g, enPlato.has(a.id), enTodos)
   })
+  const cubierto = !enTodos && s.resta[k] <= 0.5
   $('lista').innerHTML = html.length
-    ? (s.resta[k] <= 0.5 ? `<div class="covered">Ya tienes cubiertos los ${GRUPO[k].toLowerCase()} de esta comida.</div>` : '') + html.join('')
+    ? (cubierto ? `<div class="covered">Ya tienes cubiertos los ${GRUPO[k].toLowerCase()} de esta comida.</div>` : '') + html.join('')
     : `<div class="empty">${estado.cadena === 'favoritos' ? 'Aún no tienes favoritos. Toca la estrella de un alimento para tenerlo arriba.' : 'No hay alimentos con ese filtro.'}</div>`
-  $('nota-lista').textContent = `${filas.length} opciones de ${GRUPO[k].toLowerCase()}. Los gramos son los que le tocarían si lo añades ahora, ya reajustado con lo que tienes en el plato.`
+  $('nota-lista').textContent = enTodos
+    ? `${filas.length} alimentos. Cada uno cuenta en su grupo principal (hidratos, proteína o grasa). Los gramos son los que le tocarían si lo añades ahora.`
+    : `${filas.length} opciones de ${GRUPO[k].toLowerCase()}. Los gramos son los que le tocarían si lo añades ahora, ya reajustado con lo que tienes en el plato.`
 }
 
-function filaOpcion(a, k, secundario, g, yaEsta) {
+function filaOpcion(a, k, secundario, g, yaEsta, conGrupo = false) {
   const cad = cadenaDe(a)
   const m = g ? macrosDe(a, g) : null
   const otros = m
@@ -229,6 +243,7 @@ function filaOpcion(a, k, secundario, g, yaEsta) {
     : ''
   const meta = [
     a.estado && !a.cocido ? esc(a.estado) : '',
+    conGrupo ? `<span class="tag grupo ${k}">${GRUPO[k]}</span>` : '',
     cad !== 'generico' ? `<span class="tag">${CADENAS[cad]}</span>` : '',
     secundario ? `<span class="tag also">cuenta como ${GRUPO[a.grupo].toLowerCase()}</span>` : '',
     otros ? `<span>también ${otros}</span>` : '',
@@ -238,13 +253,14 @@ function filaOpcion(a, k, secundario, g, yaEsta) {
     ? [
         a.cocido && a.cocido[k] > 0 ? `<span class="cooked">cocido ≈ ${redondear((g * a[k]) / a.cocido[k])} g</span>` : '',
         a.medida ? `<span>${esc(textoMedida(a.medida, g / a.medida.g))}</span>` : '',
+        a.ml ? `<span>${esc(textoVolumen(a, g))}</span>` : '',
       ].join('')
     : ''
   const cantidad = yaEsta ? '<span>en el plato</span>' : g ? `<b>${g}<small>${esc(etiqueta)}</small></b>${lineas}` : '<span>no hace falta</span>'
   return `<div class="item">
     <button class="star" data-fav="${esc(a.id)}" aria-pressed="${esFav(a.id)}" aria-label="Favorito">★</button>
     <div class="info"><b>${esc(a.nombre)}</b><div class="meta">${meta}</div></div>
-    <div class="amount">${cantidad}<button class="addbtn" data-add="${esc(a.id)}" ${yaEsta ? 'disabled' : ''}>${yaEsta ? '✓' : '+ Añadir'}</button></div>
+    <div class="amount">${cantidad}<button class="addbtn" data-add="${esc(a.id)}" data-addgrupo="${k}" ${yaEsta ? 'disabled' : ''}>${yaEsta ? '✓' : '+ Añadir'}</button></div>
   </div>`
 }
 
@@ -267,7 +283,7 @@ $('lista').addEventListener('click', (e) => {
   const add = e.target.closest('[data-add]')
   if (add) {
     const lista = estado.plato[estado.comida] || []
-    lista.push({ id: add.dataset.add, grupo: estado.grupo, fijo: null })
+    lista.push({ id: add.dataset.add, grupo: add.dataset.addgrupo, fijo: null })
     estado.plato[estado.comida] = lista
     guardar()
     pintar()
@@ -288,7 +304,7 @@ function pintarPostres(s) {
     .map(({ it, alimento: a }, i) => {
       const g = gramosPostre(a, it)
       const m = macrosDe(a, g)
-      const cant = it.modo === 'unidad' ? `${fmt(it.cantidad)} × ${a.medida.nombre}` : `${it.cantidad} g`
+      const cant = it.modo === 'unidad' ? `${fmt(it.cantidad)} × ${a.medida.nombre}` : a.ml ? `${Math.round(it.cantidad / a.ml)} ml` : `${it.cantidad} g`
       return `<div class="dessert">
         <div class="name"><b>${esc(a.nombre)}</b><span>${cadenaDe(a) !== 'generico' ? CADENAS[cadenaDe(a)] + ' · ' : ''}${fmt(m.p)} P · ${fmt(m.hc)} HC · ${fmt(m.g)} G</span></div>
         <div class="qty"><button data-menos="${i}" aria-label="Menos">−</button><output>${cant}</output><button data-mas="${i}" aria-label="Más">+</button></div>
@@ -428,7 +444,7 @@ function pintarAlimentos() {
         return `<tr><th colspan="5">${nombreGrupo[gr]}</th></tr>` +
           filas
             .map((a) => {
-              const det = [cadenaDe(a) !== 'generico' ? CADENAS[cadenaDe(a)] : '', a.estado || '', a.postre && gr !== 'postre' ? 'postre' : '', a.cocido ? `cocido: ${fmt(a.cocido.hc)} HC · ${fmt(a.cocido.p)} P · ${fmt(a.cocido.g)} G` : '', a.medida ? `1 ${a.medida.nombre} = ${fmt(a.medida.g)} g` : '']
+              const det = [cadenaDe(a) !== 'generico' ? CADENAS[cadenaDe(a)] : '', a.estado || '', a.postre && gr !== 'postre' ? 'postre' : '', a.cocido ? `cocido: ${fmt(a.cocido.hc)} HC · ${fmt(a.cocido.p)} P · ${fmt(a.cocido.g)} G` : '', a.medida ? `1 ${a.medida.nombre} = ${fmt(a.medida.g)} g` : '', a.ml ? `1 ml = ${fmt(a.ml, 3)} g` : '']
                 .filter(Boolean)
                 .join(' · ')
               return `<tr><td>${esc(a.nombre)}${det ? `<br><small>${esc(det)}</small>` : ''}</td><td>${fmt(a.hc)}</td><td>${fmt(a.p)}</td><td>${fmt(a.g)}</td><td>${fuente(a)}</td></tr>`

@@ -89,6 +89,7 @@ GENERICOS = [
     ('yogur-griego-0', 'Yogur griego 0 %', 'p', None, 170894, None, None, ''),
     ('cottage', 'Queso cottage 1 %', 'p', None, 173417, None, None, ''),
     ('leche-desnatada', 'Leche desnatada', 'p', None, 171269, None, None, ''),
+    ('leche-entera', 'Leche entera', 'p', None, 171265, None, None, ''),
     ('tofu', 'Tofu firme', 'p', None, 172475, None, None, ''),
     ('tempeh', 'Tempeh', 'p', None, 174272, None, None, ''),
     ('whey', 'Proteína whey en polvo', 'p', None, 173180, None, None, 'genérica'),
@@ -113,6 +114,19 @@ GENERICOS = [
     ('queso-curado', 'Queso curado tipo parmesano', 'g', 'p', 170848, None, None, ''),
     ('coco', 'Coco rallado', 'g', None, 170170, None, None, 'sin azúcar'),
 ]
+
+# Densidad (g/ml) de los líquidos, para dar la equivalencia en mililitros.
+# USDA FoodData Central, peso de las porciones: onza líquida (29,57 ml) o taza (236,6 ml).
+DENSIDAD = {
+    'leche-desnatada': round(30.6 / 29.5735, 3),  # 171269: 1 fl oz = 30,6 g
+    'leche-entera': round(30.5 / 29.5735, 3),  # 171265: 1 fl oz = 30,5 g
+    'kefir': round(243 / 236.588, 3),  # 170904: 1 cup = 243 g
+    'aceite': round(216 / 236.588, 3),  # 171413: 1 cup = 216 g
+    'aceite-girasol': round(218 / 236.588, 3),  # 171025: 1 cup = 218 g
+    # Productos lácteos líquidos: densidad de la leche desnatada de USDA (171269)
+    'off-8480000106780': round(30.6 / 29.5735, 3),
+    'off-8432022001734': round(30.6 / 29.5735, 3),
+}
 
 # Postres genéricos (se miden en gramos)
 POSTRES_GENERICOS = [
@@ -154,7 +168,7 @@ PRODUCTOS = [
     ('8480000383150', 'mercadona', 'p', None, None, False, 'Tofu firme'),
     ('8480000609632', 'mercadona', 'p', None, None, False, 'Queso fresco cottage'),
     ('8480000510747', 'mercadona', 'p', None, ('tarrina', 62.5), False, 'Queso fresco de Burgos 0 %'),
-    ('8480000106780', 'mercadona', 'p', None, ('vaso', 250), False, 'Leche desnatada +Proteínas'),
+    ('8480000106780', 'mercadona', 'p', None, None, False, 'Leche desnatada +Proteínas'),
     ('8480000140135', 'mercadona', 'hc', None, None, False, 'Tortitas de arroz'),
     ('8480000141583', 'mercadona', 'hc', None, None, False, 'Tortitas de maíz'),
     ('8480000808707', 'mercadona', 'hc', None, ('tortilla', 60), False, 'Maxi tortillas de trigo'),
@@ -283,6 +297,10 @@ for code, cadena, grupo, tambien, unidad, postre, nombre in PRODUCTOS:
     if unidad:
         a['medida'] = {'nombre': unidad[0], 'g': unidad[1]}
     out.append(a)
+
+for a in out:
+    if a['id'] in DENSIDAD:
+        a['ml'] = DENSIDAD[a['id']]
 
 cabecera = '''// Archivo generado por tools/dieta/generar_alimentos.py; no editar a mano.
 // Valores por 100 g de porción comestible.
