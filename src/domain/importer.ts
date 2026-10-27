@@ -53,17 +53,21 @@ function monthNear(rows: Cell[][], h: number, c0: number): number | null {
   for (const r of [h - 1, h - 2, h]) {
     const row = rows[r]
     if (!row) continue
-    // Grupos de letras sueltas seguidas en la fila (el mes puede no empezar justo en el día 1).
+    // Grupos de letras sueltas seguidas en la fila. Si la hoja empieza con los últimos días
+    // del mes anterior, puede haber dos meses escritos: vale el que empieza más cerca del día 1.
     let word = ''
+    let best: { month: number; dist: number } | null = null
     for (let c = 0; c <= row.length; c++) {
       const t = c < row.length ? text(row[c]) : ''
       if (/^[A-ZÁÉÍÓÚÑ]$/i.test(t)) word += t.toUpperCase()
       else {
         const i = MONTHS.indexOf(word)
-        if (i >= 0 && Math.abs(c - word.length - c0) <= 3) return i + 1
+        const dist = Math.abs(c - word.length - c0)
+        if (i >= 0 && dist <= 3 && (!best || dist < best.dist)) best = { month: i + 1, dist }
         word = ''
       }
     }
+    if (best) return best.month
     let idx: number
     for (const v of row) {
       const t = text(v).toUpperCase()
@@ -138,6 +142,62 @@ export function hasDayHeader(rows: Cell[][]): boolean {
   return rows.slice(0, 40).some((r) => headerCol(r ?? []) >= 0)
 }
 
+// Coincidencias con la fila de días de la semana (L M X J V S D) si existe. Una fila de
+// persona (con puesto en la columna A) o con pocas letras no cuenta como tal.
+function weekdayScore(colDate: Record<number, string>, wrow: Cell[] | undefined): { ok: number; total: number } {
+  const cells = Object.keys(colDate).map(Number)
+  const letters = cells.filter((c) => /^[LMXJVSD]$/i.test(text(wrow?.[c]))).length
+  if (!wrow || text(wrow[0]) || letters < Math.min(5, cells.length)) return { ok: 0, total: 0 }
+  let ok = 0
+  let total = 0
+  for (const [c, date] of Object.entries(colDate)) {
+    const t = text(wrow?.[Number(c)]).toUpperCase()
+    if (!/^[LMXJVSD]$/.test(t)) continue
+    total++
+    if (t === WEEKDAY_LETTER[weekday(date)]) ok++
+  }
+  return { ok, total }
+}
+
+function tryDates(header: Cell[], c0: number, year: number, month: number): Record<number, string> | null {
+  try {
+    return columnDates(header, c0, year, month)
+  } catch {
+    return null
+  }
+}
+
+// Fechas de un bloque. Prueba primero los meses indicados (el escrito encima del día 1 y
+// el del nombre de la pestaña); si no cuadran con el número de días o con la fila de días
+// de la semana, busca el mes que sí cuadra.
+function blockDates(header: Cell[], wrow: Cell[] | undefined, c0: number, year: number, months: (number | null)[]): Record<number, string> {
+  const fits = (cd: Record<number, string> | null) => {
+    if (!cd) return false
+    const w = weekdayScore(cd, wrow)
+    return w.total === 0 || w.ok / w.total >= 0.9
+  }
+  for (const m of months) {
+    if (m === null) continue
+    const cd = tryDates(header, c0, year, m)
+    if (fits(cd)) return cd!
+  }
+  const prefer = months.filter((m): m is number => m !== null)
+  let best: { cd: Record<number, string>; score: number } | null = null
+  for (const y of [year, year - 1, year + 1]) {
+    for (let m = 1; m <= 12; m++) {
+      const cd = tryDates(header, c0, y, m)
+      if (!cd) continue
+      const w = weekdayScore(cd, wrow)
+      if (w.total === 0 || w.ok / w.total < 0.9) continue
+      const score = w.ok * 10 + (prefer.includes(m) ? 5 : 0) + (y === year ? 2 : 0) - Math.min(...prefer.map((p) => Math.abs(p - m)), 12) * 0.1
+      if (!best || score > best.score) best = { cd, score }
+    }
+  }
+  if (best) return best.cd
+  // Sin pistas suficientes: el error del mes escrito explica el problema.
+  return columnDates(header, c0, year, prefer[0] ?? 1)
+}
+
 export function parsePlantilla(rows: Cell[][], hints: ParseHints = {}): ParsedPlantilla {
   const warnings: string[] = []
 
@@ -153,10 +213,12 @@ export function parsePlantilla(rows: Cell[][], hints: ParseHints = {}): ParsedPl
   const fromName = hints.sheetName ? monthYearFromName(hints.sheetName) : { month: null, year: null }
   const year = yearNear(rows, h) ?? fromName.year ?? hints.year ?? null
   if (year === null) throw new Error('No encuentro el año en la cabecera.')
-  const month = monthNear(rows, h, c0) ?? fromName.month
-  if (month === null) throw new Error('No encuentro el nombre del mes encima del día 1 ni en el nombre de la pestaña.')
+  const month = monthNear(rows, h, c0)
+  if (month === null && fromName.month === null && weekdayScore(columnDates(rows[h], c0, year, 1), rows[h + 1]).total === 0) {
+    throw new Error('No encuentro el nombre del mes encima del día 1 ni en el nombre de la pestaña.')
+  }
 
-  let colDate = columnDates(rows[h], c0, year, month)
+  let colDate = blockDates(rows[h], rows[h + 1], c0, year, [month, fromName.month])
   let cols = Object.keys(colDate).map(Number)
 
   // Comprueba la fila de días de la semana de un bloque.
@@ -196,7 +258,7 @@ export function parsePlantilla(rows: Cell[][], hints: ParseHints = {}): ParsedPl
             const [ly, lm] = lastDate.split('-').map(Number)
             ny = nm < lm ? ly + 1 : ly
           }
-          colDate = columnDates(row, hc, ny, nm)
+          colDate = blockDates(row, rows[r + 1], hc, ny, [nm])
           cols = Object.keys(colDate).map(Number)
           blockCols = cols
           lastDate = colDate[cols[cols.length - 1]]
@@ -275,25 +337,40 @@ export function parseWorkbook(sheets: { sheet: string; data: Cell[][] }[]): Pars
   return { ...merged, warnings: [...failed.map((f) => `No se ha cargado. ${f}`), ...merged.warnings] }
 }
 
-// Une plantillas leídas de varias hojas del mismo archivo.
+// Une plantillas leídas de varias hojas del mismo archivo. Si dos hojas traen el mismo
+// día, manda la que tiene más días de ese mes (la hoja del mes frente a un resto en otra).
 export function mergeParsed(parts: ParsedPlantilla[]): ParsedPlantilla {
   if (parts.length === 1) return parts[0]
+  const coverage = parts.map((p) => {
+    const days: Record<string, Set<string>> = {}
+    for (const row of Object.values(p.grid)) for (const d of Object.keys(row)) (days[d.slice(0, 7)] ??= new Set()).add(d)
+    return (month: string) => days[month]?.size ?? 0
+  })
   const persons: Record<string, Person> = {}
   const grid: Grid = {}
+  const owner: Record<string, number> = {} // "id|fecha" -> índice de la hoja que manda
   const warnings: string[] = []
   let conflicts = 0
-  for (const p of parts) {
+  parts.forEach((p, i) => {
     warnings.push(...p.warnings)
     for (const [id, person] of Object.entries(p.persons)) persons[id] ??= person
     for (const [id, row] of Object.entries(p.grid)) {
       const target = (grid[id] ??= {})
       for (const [date, code] of Object.entries(row)) {
-        if (target[date] === undefined) target[date] = code
-        else if (target[date] !== code) conflicts++
+        const key = `${id}|${date}`
+        const prev = owner[key]
+        if (prev === undefined) {
+          target[date] = code
+          owner[key] = i
+        } else if (coverage[i](date.slice(0, 7)) > coverage[prev](date.slice(0, 7))) {
+          if (target[date] !== code) conflicts++
+          target[date] = code
+          owner[key] = i
+        } else if (target[date] !== code) conflicts++
       }
     }
-  }
-  if (conflicts) warnings.push(`${conflicts} días con valores distintos entre hojas; se ha mantenido el de la primera hoja.`)
+  })
+  if (conflicts) warnings.push(`${conflicts} días aparecen distintos en dos pestañas; se ha usado la pestaña que tiene el mes completo.`)
   const codes: Record<string, number> = {}
   for (const row of Object.values(grid)) for (const c of Object.values(row)) codes[c] = (codes[c] ?? 0) + 1
   const all = Object.values(grid).flatMap((r) => Object.keys(r)).sort()

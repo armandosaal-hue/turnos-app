@@ -170,3 +170,44 @@ describe('pestañas', () => {
     expect(monthYearFromName('Hoja1')).toEqual({ month: null, year: null })
   })
 })
+
+describe('pestaña que empieza con días del mes anterior', () => {
+  it('usa el mes escrito encima del día 1, no el del mes anterior', () => {
+    // 29 y 30 de octubre, luego noviembre. "OCT" encima del 29, "NOVIEMBRE" encima del 1.
+    const nov = [
+      [null, null, 'O', 'C', 'T', 'N', 'O', 'V', 'I', 'E', 'M', 'B', 'R', 'E'],
+      [null, '2026', 29, 30, 31, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      [null, null, 'J', 'V', 'S', 'D', 'L', 'M', 'X', 'J', 'V', 'S', 'D', 'L'],
+      [1, 'A, ANA', 'x', 'x', 'x', 'N', 'D', 'L', '', 'L', 'L', 'N', 'D', 'L'],
+    ]
+    const p = parseWorkbook([{ sheet: 'NOVIEMBRE', data: nov }])
+    expect(p.from).toBe('2026-11-01')
+    expect(p.grid['A, ANA']['2026-11-01']).toBe('N')
+    expect(p.warnings.some((w) => w.includes('No se ha cargado'))).toBe(false)
+  })
+
+  it('si el rótulo del mes no cuadra con la fila de días de la semana, usa el nombre de la pestaña', () => {
+    const days = Array.from({ length: 30 }, (_, i) => i + 1)
+    const L = 'DLMXJVS'
+    const nov = [
+      [null, 'SEPTIEMBRE'],
+      [null, '2026', ...days],
+      [null, null, ...days.map((d) => L[new Date(Date.UTC(2026, 10, d)).getUTCDay()])],
+      [1, 'A, ANA', ...days.map(() => 'L')],
+    ]
+    const p = parseWorkbook([{ sheet: 'NOVIEMBRE', data: nov }])
+    expect(p.from).toBe('2026-11-01')
+    expect(p.to).toBe('2026-11-30')
+  })
+})
+
+describe('día repetido en dos pestañas', () => {
+  it('manda la pestaña con el mes completo', () => {
+    const base = { from: '', to: '', codes: {}, warnings: [] }
+    const anual = { ...base, persons: { A: { id: 'A', name: 'A', note: '', puesto: '1', section: 'Rotatorio', candidate: true } }, grid: { A: { '2026-10-31': 'L', '2026-11-01': 'L' } } }
+    const nov = { ...base, persons: anual.persons, grid: { A: { '2026-11-01': 'N', '2026-11-02': 'D', '2026-11-03': 'L' } } }
+    const m = mergeParsed([anual, nov])
+    expect(m.grid.A['2026-11-01']).toBe('N')
+    expect(m.grid.A['2026-10-31']).toBe('L')
+  })
+})
