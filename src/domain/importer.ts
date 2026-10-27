@@ -53,10 +53,18 @@ function monthNear(rows: Cell[][], h: number, c0: number): number | null {
   for (const r of [h - 1, h - 2, h]) {
     const row = rows[r]
     if (!row) continue
+    // Grupos de letras sueltas seguidas en la fila (el mes puede no empezar justo en el día 1).
     let word = ''
-    for (let c = c0; c < row.length && /^[A-ZÁÉÍÓÚÑ]$/i.test(text(row[c])); c++) word += text(row[c]).toUpperCase()
-    let idx = MONTHS.indexOf(word)
-    if (idx >= 0) return idx + 1
+    for (let c = 0; c <= row.length; c++) {
+      const t = c < row.length ? text(row[c]) : ''
+      if (/^[A-ZÁÉÍÓÚÑ]$/i.test(t)) word += t.toUpperCase()
+      else {
+        const i = MONTHS.indexOf(word)
+        if (i >= 0 && Math.abs(c - word.length - c0) <= 3) return i + 1
+        word = ''
+      }
+    }
+    let idx: number
     for (const v of row) {
       const t = text(v).toUpperCase()
       // Solo celdas que son el mes (con año opcional), para no confundir apellidos como "Mayo".
@@ -100,22 +108,53 @@ function columnDates(header: Cell[], c0: number, year: number, month: number): R
   return colDate
 }
 
-export function parsePlantilla(rows: Cell[][]): ParsedPlantilla {
+const MONTH_ABBR = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC']
+
+// Mes y año a partir de un texto suelto, como el nombre de una pestaña ("NOVIEMBRE", "Nov 26").
+export function monthYearFromName(name: string): { month: number | null; year: number | null } {
+  const t = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+  let month: number | null = null
+  const full = MONTHS.findIndex((m) => new RegExp(`(^|[^A-Z])${m.normalize('NFD').replace(/[\u0300-\u036f]/g, '')}([^A-Z]|$)`).test(t))
+  if (full >= 0) month = full + 1
+  else {
+    const ab = MONTH_ABBR.findIndex((m) => new RegExp(`(^|[^A-Z])${m}(T)?([^A-Z]|$)`).test(t))
+    if (ab >= 0) month = ab + 1
+  }
+  const y4 = t.match(/(^|\D)(20\d\d)(\D|$)/)
+  const y2 = t.match(/(^|[^\d])(\d\d)$/)
+  const year = y4 ? Number(y4[2]) : y2 && month ? 2000 + Number(y2[2]) : null
+  return { month, year }
+}
+
+export interface ParseHints {
+  sheetName?: string
+  year?: number // año de la hoja anterior, si esta no lo trae
+}
+
+export function hasDayHeader(rows: Cell[][]): boolean {
+  return rows.slice(0, 40).some((r) => headerCol(r ?? []) >= 0)
+}
+
+export function parsePlantilla(rows: Cell[][], hints: ParseHints = {}): ParsedPlantilla {
   const warnings: string[] = []
 
   // 1. Primera fila de días.
   let h = -1
   let c0 = -1
-  for (let r = 0; r < Math.min(rows.length, 15) && h < 0; r++) {
+  for (let r = 0; r < Math.min(rows.length, 40) && h < 0; r++) {
     c0 = headerCol(rows[r] ?? [])
     if (c0 >= 0) h = r
   }
   if (h < 0) throw new Error('No encuentro la fila con los días del mes (1, 2, 3…).')
 
-  const year = yearNear(rows, h)
+  const fromName = hints.sheetName ? monthYearFromName(hints.sheetName) : { month: null, year: null }
+  const year = yearNear(rows, h) ?? fromName.year ?? hints.year ?? null
   if (year === null) throw new Error('No encuentro el año en la cabecera.')
-  const month = monthNear(rows, h, c0)
-  if (month === null) throw new Error('No encuentro el nombre del mes encima del día 1.')
+  const month = monthNear(rows, h, c0) ?? fromName.month
+  if (month === null) throw new Error('No encuentro el nombre del mes encima del día 1 ni en el nombre de la pestaña.')
 
   let colDate = columnDates(rows[h], c0, year, month)
   let cols = Object.keys(colDate).map(Number)
@@ -211,6 +250,29 @@ export function parsePlantilla(rows: Cell[][]): ParsedPlantilla {
 function headerLike(row: Cell[], cols: number[]): boolean {
   const letters = cols.filter((c) => /^[A-ZÁÉÍÓÚÑ]$/i.test(text(row[c]))).length
   return letters >= Math.min(5, cols.length)
+}
+
+// Lee todas las pestañas con fila de días y las une. Si una no se puede leer, avisa de
+// cuál y por qué en lugar de descartarla en silencio.
+export function parseWorkbook(sheets: { sheet: string; data: Cell[][] }[]): ParsedPlantilla {
+  const parts: ParsedPlantilla[] = []
+  const failed: string[] = []
+  let firstError: unknown
+  let year: number | undefined
+  for (const s of sheets) {
+    if (!hasDayHeader(s.data)) continue
+    try {
+      const p = parsePlantilla(s.data, { sheetName: s.sheet, year })
+      parts.push(p)
+      year = Number(p.to.slice(0, 4))
+    } catch (e) {
+      firstError ??= e
+      failed.push(`Pestaña "${s.sheet}": ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  if (!parts.length) throw firstError ?? new Error('El archivo no tiene ninguna pestaña con plantilla (fila de días 1, 2, 3…).')
+  const merged = mergeParsed(parts)
+  return { ...merged, warnings: [...failed.map((f) => `No se ha cargado. ${f}`), ...merged.warnings] }
 }
 
 // Une plantillas leídas de varias hojas del mismo archivo.

@@ -128,3 +128,45 @@ describe('fecha inicial', () => {
     expect(defaultDate(['2026-01', '2026-10'], '2026-10')).toBe('2026-10')
   })
 })
+
+import { parseWorkbook, monthYearFromName } from './importer'
+describe('pestañas', () => {
+  const oct = [
+    [null, null, 'O', 'C', 'T', 'U', 'B', 'R', 'E'],
+    [null, '2026', 1, 2, 3],
+    [null, null, 'J', 'V', 'S'],
+    [1, 'A, ANA', 'N', 'D', 'L'],
+  ]
+  it('noviembre en otra pestaña sin año ni mes en la hoja: usa el nombre de la pestaña y el año anterior', () => {
+    const nov = [[null, null, 1, 2, 3], [null, null, 'D', 'L', 'M'], [1, 'A, ANA', 'L', '', 'N']]
+    const p = parseWorkbook([
+      { sheet: 'OCTUBRE', data: oct },
+      { sheet: 'NOVIEMBRE', data: nov },
+      { sheet: 'Leyenda', data: [['L', 'Libre']] },
+    ])
+    expect(p.grid['A, ANA']['2026-11-03']).toBe('N')
+    expect(p.warnings.some((w) => w.includes('No se ha cargado'))).toBe(false)
+  })
+  it('noviembre con el mes letra a letra desplazado respecto al día 1', () => {
+    const nov = [[null, null, null, 'N', 'O', 'V', 'I', 'E', 'M', 'B', 'R', 'E'], [null, null, 1, 2, 3], [1, 'A, ANA', 'L', '', 'N']]
+    const p = parseWorkbook([
+      { sheet: 'Hoja1', data: oct },
+      { sheet: 'Hoja2', data: nov },
+    ])
+    expect(p.grid['A, ANA']['2026-11-01']).toBe('L')
+  })
+  it('avisa de la pestaña que no puede leer', () => {
+    const raro = [[null, null, 1, 2, 3], [1, 'A, ANA', 'L', '', 'N']]
+    const p = parseWorkbook([
+      { sheet: 'OCTUBRE', data: oct },
+      { sheet: 'Hoja 2', data: raro },
+    ])
+    expect(p.warnings[0]).toMatch(/No se ha cargado. Pestaña "Hoja 2": No encuentro el nombre del mes/)
+  })
+  it('nombres de pestaña abreviados', () => {
+    expect(monthYearFromName('Nov 26')).toEqual({ month: 11, year: 2026 })
+    expect(monthYearFromName('SEPT 2026')).toEqual({ month: 9, year: 2026 })
+    expect(monthYearFromName('Plantilla diciembre')).toEqual({ month: 12, year: null })
+    expect(monthYearFromName('Hoja1')).toEqual({ month: null, year: null })
+  })
+})

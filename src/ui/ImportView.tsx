@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import readXlsxFile from 'read-excel-file/universal'
-import { mergeParsed, monthsSummary, parseCsv, parsePlantilla, type Cell, type ParsedPlantilla } from '../domain/importer'
+import { monthsSummary, parseCsv, parsePlantilla, parseWorkbook, type Cell, type ParsedPlantilla } from '../domain/importer'
 import { codeLabel, suggestCode } from '../domain/legend'
 import { fmtShort, MONTHS } from '../domain/dates'
 import { analyzeImport, applyImport, unknownCodes, type ImportAnalysis } from '../domain/state'
@@ -291,21 +291,6 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
 function monthName(ym: string): string {
   const [y, m] = ym.split('-').map(Number)
   return `${MONTHS[m - 1].toLowerCase()} ${y}`
-}
-
-// Lee todas las pestañas con fila de días y las une. Las demás pestañas se ignoran.
-function parseWorkbook(sheets: { sheet: string; data: Cell[][] }[]): ParsedPlantilla {
-  const parts: ParsedPlantilla[] = []
-  let firstError: unknown
-  for (const s of sheets) {
-    try {
-      parts.push(parsePlantilla(s.data))
-    } catch (e) {
-      firstError ??= e
-    }
-  }
-  if (!parts.length) throw firstError ?? new Error('El archivo no tiene ninguna hoja con plantilla.')
-  return mergeParsed(parts)
 }
 
 export function CodeKindFields({ def, onChange }: { def: ShiftCode; onChange: (p: Partial<ShiftCode>) => void }) {
