@@ -1,5 +1,5 @@
 import { allDates, cambioCells } from './engine'
-import type { ParsedPlantilla } from './importer'
+import { personKey, type ParsedPlantilla } from './importer'
 import { defaultLegend } from './legend'
 import { defaultRules } from './rules'
 import type { AppState, Cambio, CambioType, Origins } from './types'
@@ -108,7 +108,12 @@ export function applyImport(
     const target = { ...(grid[pid] ?? {}) }
     const o = { ...(origins[pid] ?? {}) }
     for (const [date, code] of Object.entries(row)) {
-      if (keep.has(`${pid}|${date}`)) continue
+      if (keep.has(`${pid}|${date}`)) {
+        // Se mantiene lo manual, pero "volver a la plantilla" debe llevar a esta versión.
+        const prev = o[date]
+        if (prev?.origin === 'manual') o[date] = { origin: 'manual', before: code }
+        continue
+      }
       target[date] = code
       delete o[date]
     }
@@ -196,10 +201,48 @@ export function deleteCambio(state: AppState, id: string): AppState {
 }
 
 export function editCell(state: AppState, personId: string, date: string, code: string): AppState {
+  return editCells(state, personId, [date], code)
+}
+
+// Cambia a mano varios días de una persona. Guarda el valor anterior la primera vez
+// para poder deshacerlo con clearManual.
+export function editCells(state: AppState, personId: string, dates: string[], code: string): AppState {
+  const row = { ...(state.grid[personId] ?? {}) }
+  const o = { ...(state.origins[personId] ?? {}) }
+  for (const date of dates) {
+    const prev = o[date]
+    const before = prev?.origin === 'manual' ? prev.before : row[date]
+    row[date] = code
+    o[date] = { origin: 'manual', before }
+  }
+  return { ...state, grid: { ...state.grid, [personId]: row }, origins: { ...state.origins, [personId]: o } }
+}
+
+// Quita una edición manual y devuelve el día al valor que tenía (o lo deja sin dato).
+export function clearManual(state: AppState, personId: string, dates: string[]): AppState {
+  const row = { ...(state.grid[personId] ?? {}) }
+  const o = { ...(state.origins[personId] ?? {}) }
+  for (const date of dates) {
+    const prev = o[date]
+    if (prev?.origin !== 'manual') continue
+    if (prev.before === undefined) delete row[date]
+    else row[date] = prev.before
+    delete o[date]
+  }
+  return { ...state, grid: { ...state.grid, [personId]: row }, origins: { ...state.origins, [personId]: o } }
+}
+
+// Me marca como "yo". Si no aparezco en ninguna plantilla, crea mi fila con la misma
+// clave que usará la plantilla cuando salga mi nombre, para que se unan.
+export function ensureMe(state: AppState, rawName: string): AppState {
+  const { id, name, note } = personKey(rawName)
+  if (!id) return state
+  if (state.persons[id]) return { ...state, meId: id }
   return {
     ...state,
-    grid: { ...state.grid, [personId]: { ...state.grid[personId], [date]: code } },
-    origins: { ...state.origins, [personId]: { ...(state.origins[personId] ?? {}), [date]: { origin: 'manual' } } },
+    meId: id,
+    persons: { ...state.persons, [id]: { id, name, note, puesto: '', section: 'Rotatorio', candidate: false } },
+    grid: { ...state.grid, [id]: state.grid[id] ?? {} },
   }
 }
 

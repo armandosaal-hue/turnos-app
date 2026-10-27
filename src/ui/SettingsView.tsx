@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { loadVisionSettings, MODELS, saveVisionSettings, type VisionSettings } from '../visionSettings'
-import { emptyState } from '../domain/state'
+import { emptyState, ensureMe } from '../domain/state'
 import type { AppState, Rules, ShiftCode } from '../domain/types'
 import { clearState, downloadJson } from '../store'
 import { CodeChip, normalize, PersonPicker } from './common'
@@ -40,6 +40,7 @@ export function SettingsView({ state, setState }: { state: AppState; setState: (
 
 function MeTab({ state, setState }: { state: AppState; setState: (s: AppState) => void }) {
   const me = state.meId ? state.persons[state.meId] : undefined
+  const [name, setName] = useState('')
   return (
     <div className="card">
       <h2>¿Quién eres?</h2>
@@ -50,8 +51,19 @@ function MeTab({ state, setState }: { state: AppState; setState: (s: AppState) =
       {Object.keys(state.persons).length ? (
         <PersonPicker persons={state.persons} value={state.meId} onChange={(id) => setState({ ...state, meId: id })} />
       ) : (
-        <p className="hint">Carga primero una plantilla.</p>
+        <p className="hint">Todavía no hay plantilla cargada.</p>
       )}
+      <h2>¿Todavía no apareces?</h2>
+      <p className="hint">
+        Escribe tu nombre tal como saldrá en la plantilla (APELLIDOS, NOMBRE) y mete tus turnos a mano en Calendario → Mis turnos. Cuando salgas en una
+        plantilla, tus días se unen solos.
+      </p>
+      <div className="row">
+        <input id="mi-nombre-ajustes" value={name} onChange={(e) => setName(e.target.value)} placeholder="APELLIDOS, NOMBRE" />
+        <button className="primary" disabled={!name.includes(',')} onClick={() => setState(ensureMe(state, name))}>
+          Guardar
+        </button>
+      </div>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { recommend } from './engine'
-import { emptyState, registerCambio, deleteCambio, analyzeImport, applyImport } from './state'
+import { emptyState, registerCambio, deleteCambio, analyzeImport, applyImport, ensureMe, editCells, clearManual } from './state'
 import type { AppState, Person } from './types'
 import { violations } from './rules'
 import { defaultLegend } from './legend'
@@ -233,5 +233,47 @@ describe('encadenar turnos y no partir libres', () => {
     const s = state({ YO: 'L L _ L L', ANA: 'L L L L L', BEA: 'L _ L L L' }, { rules })
     const r = recommend(s, 'YO', day(3))
     expect(r.candidates.every((c) => !c.reasons.join(' ').match(/Encadena|parte/))).toBe(true)
+  })
+})
+
+describe('mis turnos a mano', () => {
+  it('crea mi fila si no aparezco y la une con la plantilla cuando salgo, respetando lo manual', () => {
+    let s = ensureMe(emptyState(), 'SAAL PÉREZ, ARMANDO')
+    expect(s.meId).toBe('SAAL PÉREZ, ARMANDO')
+    s = editCells(s, s.meId!, [day(1), day(2)], 'N')
+    expect(s.grid[s.meId!]).toEqual({ [day(1)]: 'N', [day(2)]: 'N' })
+    const parsed = {
+      persons: { 'SAAL PÉREZ, ARMANDO': person('SAAL PÉREZ, ARMANDO') },
+      grid: { 'SAAL PÉREZ, ARMANDO': row('N D L') },
+      from: day(1),
+      to: day(3),
+      codes: {},
+      warnings: [],
+    }
+    const a = analyzeImport(s, parsed)
+    // Día 1 coincide (deja de ser manual); día 2 difiere y es manual (se mantiene); día 3 es nuevo.
+    expect(a.diffs.map((d) => [d.date, d.kind, d.apply])).toEqual([[day(2), 'manual', false]])
+    s = applyImport(s, parsed, a, 'v1')
+    expect(s.grid[s.meId!]).toEqual({ [day(1)]: 'N', [day(2)]: 'N', [day(3)]: 'L' })
+    expect(s.origins[s.meId!][day(1)]).toBeUndefined()
+    // Volver a la plantilla en el día 2 deja el valor de la versión nueva.
+    s = clearManual(s, s.meId!, [day(2)])
+    expect(s.grid[s.meId!][day(2)]).toBe('D')
+  })
+
+  it('borrar lo manual vuelve al valor anterior o deja el día sin dato', () => {
+    let s = state({ YO: 'L _ L' })
+    s = editCells(s, 'YO', [day(2), day(5)], 'V')
+    s = editCells(s, 'YO', [day(2)], 'B') // segunda edición: conserva el original
+    s = clearManual(s, 'YO', [day(2), day(5)])
+    expect(s.grid.YO[day(2)]).toBe('')
+    expect(s.grid.YO[day(5)]).toBeUndefined()
+    expect(s.origins.YO?.[day(2)]).toBeUndefined()
+  })
+
+  it('el motor usa mis turnos corregidos', () => {
+    let s = state({ YO: 'L L L', ANA: 'L L L' })
+    s = editCells(s, 'YO', [day(2)], 'N')
+    expect(recommend(s, 'YO', day(2)).type).toBe('quitar')
   })
 })

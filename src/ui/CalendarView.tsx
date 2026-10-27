@@ -4,7 +4,8 @@ import { codeLabel, displayCode } from '../domain/legend'
 import { fmtShort, MONTHS, weekday, WEEKDAY_LETTER } from '../domain/dates'
 import { editCell } from '../domain/state'
 import type { AppState } from '../domain/types'
-import { CodeChip, normalize } from './common'
+import { normalize } from './common'
+import { MyShifts } from './MyShifts'
 
 export function CalendarView({ state, setState }: { state: AppState; setState: (s: AppState) => void }) {
   const dates = useMemo(() => allDates(state.grid), [state.grid])
@@ -15,8 +16,6 @@ export function CalendarView({ state, setState }: { state: AppState; setState: (
   const [q, setQ] = useState('')
   const [edit, setEdit] = useState<{ personId: string; date: string } | null>(null)
 
-  if (!dates.length) return <div className="empty">Primero carga una plantilla en la pestaña <b>Cargar</b>.</div>
-
   const monthDates = dates.filter((d) => d.startsWith(month ?? ''))
   const meId = state.meId
   const idx = months.indexOf(month)
@@ -26,39 +25,23 @@ export function CalendarView({ state, setState }: { state: AppState; setState: (
 
   return (
     <div className="view">
-      <div className="card row between">
-        <button disabled={idx <= 0} onClick={() => setMonth(months[idx - 1])}>‹</button>
-        <b>
-          {MONTHS[m - 1]?.toLowerCase()} {y}
-        </b>
-        <button disabled={idx >= months.length - 1} onClick={() => setMonth(months[idx + 1])}>›</button>
-      </div>
       <div className="seg">
-        <button className={mode === 'yo' ? 'on' : ''} onClick={() => setMode('yo')}>Mi mes</button>
+        <button className={mode === 'yo' ? 'on' : ''} onClick={() => setMode('yo')}>Mis turnos</button>
         <button className={mode === 'unidad' ? 'on' : ''} onClick={() => setMode('unidad')}>Unidad</button>
       </div>
+      {mode === 'yo' && <MyShifts state={state} setState={setState} />}
+      {mode === 'unidad' && !dates.length && <div className="empty">Primero carga una plantilla en la pestaña <b>Cargar</b>.</div>}
+      {mode === 'unidad' && dates.length > 0 && (
+        <div className="card row between">
+          <button disabled={idx <= 0} onClick={() => setMonth(months[idx - 1])}>‹</button>
+          <b>
+            {MONTHS[m - 1]?.toLowerCase()} {y}
+          </b>
+          <button disabled={idx >= months.length - 1} onClick={() => setMonth(months[idx + 1])}>›</button>
+        </div>
+      )}
 
-      {mode === 'yo' &&
-        (meId && state.grid[meId] ? (
-          <div className="month">
-            {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((l) => (
-              <div key={l} className="mh">{l}</div>
-            ))}
-            {Array.from({ length: (weekday(monthDates[0]) + 6) % 7 }, (_, i) => (
-              <div key={`e${i}`} />
-            ))}
-            {monthDates.map((d) => (
-              <button key={d} className={`mday o-${origin(meId, d) ?? 'oficial'}`} onClick={() => setEdit({ personId: meId, date: d })}>
-                <span>{Number(d.slice(8))}</span>
-                <CodeChip code={state.grid[meId][d]} legend={state.legend} small />
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="hint">Indica quién eres en Ajustes.</p>
-        ))}
-
-      {mode === 'unidad' && (
+      {mode === 'unidad' && dates.length > 0 && (
         <>
           <input className="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar por nombre…" />
           <div className="table-wrap">

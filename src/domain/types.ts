@@ -31,7 +31,9 @@ export interface Person {
 // personId -> fecha ISO -> código. Sin entrada = sin datos ese día.
 export type Grid = Record<string, Record<string, string>>
 
-export type Origin = { origin: 'manual' } | { origin: 'cambio'; cambioId: string }
+// En una edición manual, `before` guarda el valor que había (undefined = no había dato)
+// para poder volver a él.
+export type Origin = { origin: 'manual'; before?: string } | { origin: 'cambio'; cambioId: string }
 export type Origins = Record<string, Record<string, Origin>>
 
 export interface Rules {
