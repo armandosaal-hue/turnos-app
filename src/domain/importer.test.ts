@@ -211,3 +211,21 @@ describe('día repetido en dos pestañas', () => {
     expect(m.grid.A['2026-10-31']).toBe('L')
   })
 })
+
+describe('columnas de un mes borradas', () => {
+  it('30 de septiembre seguido de 30 y 31 de octubre sin rótulo: usa la fila de días de la semana', () => {
+    // Como la pestaña NOVIEMBRE real: ... 29 M, 30 X (sept), 30 V, 31 S (oct), 1 D (nov) ...
+    const rows = [
+      [null, null, 'S', 'E', 'P', 'T', 'I', 'E', 'M', 'B', 'R', 'E', null, null, null, 'N', 'O', 'V'],
+      [null, '2026', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 29, 30, 30, 31, 1, 2],
+      [null, null, 'M', 'X', 'J', 'V', 'S', 'D', 'L', 'M', 'X', 'J', 'M', 'X', 'V', 'S', 'D', 'L'],
+      [1, 'A, ANA', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'L', '', 'N', 'D'],
+    ]
+    const p = parsePlantilla(rows)
+    expect(p.warnings.filter((w) => !w.includes('celdas vacías'))).toEqual([])
+    expect(p.grid['A, ANA']['2026-09-30']).toBe('L')
+    expect(p.grid['A, ANA']['2026-10-31']).toBe('')
+    expect(p.grid['A, ANA']['2026-11-01']).toBe('N')
+    expect(p.grid['A, ANA']['2026-11-02']).toBe('D')
+  })
+})

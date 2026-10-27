@@ -90,23 +90,78 @@ function yearNear(rows: Cell[][], h: number): number | null {
 }
 
 // Columna -> fecha a partir de una fila de días. Si la numeración vuelve a empezar, pasa de mes.
-function columnDates(header: Cell[], c0: number, year: number, month: number): Record<number, string> {
+// ¿Es una fila de días de la semana (L M X J V S D) y no una de persona?
+function isWeekdayRow(row: Cell[] | undefined, cells: number[]): boolean {
+  if (!row || text(row[0])) return false
+  const letters = cells.filter((c) => /^[LMXJVSD]$/i.test(text(row[c]))).length
+  return letters >= Math.min(5, cells.length)
+}
+
+// Columna -> fecha a partir de una fila de días. Si la numeración vuelve a empezar, pasa de
+// mes. Con fila de días de la semana, cada columna se asigna al mes en que ese día cae en
+// esa letra: así se resuelven hojas a las que les han borrado columnas (p. ej. de octubre
+// solo quedan el 30 y el 31, pegados al 30 de septiembre y sin rótulo).
+function columnDates(header: Cell[], c0: number, year: number, month: number, wrow?: Cell[]): Record<number, string> {
+  const cells: number[] = []
+  for (let c = c0; c < header.length && dayNumber(header[c]) !== null; c++) cells.push(c)
+  const good = (cd: Record<number, string>) => {
+    const w = weekdayScore(cd, wrow)
+    return w.total === 0 || w.ok / w.total >= 0.9
+  }
+  let plain: Record<number, string> | null = null
+  let plainError: unknown
+  try {
+    plain = sequentialDates(header, cells, year, month, undefined)
+  } catch (e) {
+    plainError = e
+  }
+  if (plain && good(plain)) return plain
+  if (isWeekdayRow(wrow, cells)) {
+    try {
+      const smart = sequentialDates(header, cells, year, month, wrow)
+      if (good(smart)) return smart
+    } catch {
+      // sigue con la numeración normal
+    }
+  }
+  if (plain) return plain
+  throw plainError
+}
+
+function sequentialDates(header: Cell[], cells: number[], year: number, month: number, wrow?: Cell[]): Record<number, string> {
   const colDate: Record<number, string> = {}
+  const useWeekdays = !!wrow
+  let prevDate = ''
   let prev = 0
   let y = year
   let m = month
-  for (let c = c0; c < header.length; c++) {
-    const d = dayNumber(header[c])
-    if (d === null) break
-    if (d < prev) {
-      m++
-      if (m > 12) {
-        m = 1
-        y++
+  const next = (yy: number, mm: number): [number, number] => (mm === 12 ? [yy + 1, 1] : [yy, mm + 1])
+  for (const c of cells) {
+    const d = dayNumber(header[c])!
+    const letter = useWeekdays ? text(wrow![c]).toUpperCase() : ''
+    if (/^[LMXJVSD]$/.test(letter)) {
+      let cand: [number, number] = [y, m]
+      let found: [number, number] | null = null
+      for (let k = 0; k < 3 && !found; k++) {
+        const [cy, cm] = cand
+        if (d <= daysInMonth(cy, cm)) {
+          const iso = isoDate(cy, cm, d)
+          if (iso > prevDate && WEEKDAY_LETTER[weekday(iso)] === letter) found = cand
+        }
+        cand = next(cand[0], cand[1])
+      }
+      if (found) {
+        ;[y, m] = found
+        colDate[c] = isoDate(y, m, d)
+        prevDate = colDate[c]
+        prev = d
+        continue
       }
     }
+    if (d < prev) [y, m] = next(y, m)
     if (d > daysInMonth(y, m)) throw new Error(`Día ${d} no existe en ${MONTHS[m - 1].toLowerCase()} de ${y}.`)
     colDate[c] = isoDate(y, m, d)
+    prevDate = colDate[c]
     prev = d
   }
   return colDate
@@ -159,9 +214,9 @@ function weekdayScore(colDate: Record<number, string>, wrow: Cell[] | undefined)
   return { ok, total }
 }
 
-function tryDates(header: Cell[], c0: number, year: number, month: number): Record<number, string> | null {
+function tryDates(header: Cell[], c0: number, year: number, month: number, wrow?: Cell[]): Record<number, string> | null {
   try {
-    return columnDates(header, c0, year, month)
+    return columnDates(header, c0, year, month, wrow)
   } catch {
     return null
   }
@@ -178,14 +233,14 @@ function blockDates(header: Cell[], wrow: Cell[] | undefined, c0: number, year: 
   }
   for (const m of months) {
     if (m === null) continue
-    const cd = tryDates(header, c0, year, m)
+    const cd = tryDates(header, c0, year, m, wrow)
     if (fits(cd)) return cd!
   }
   const prefer = months.filter((m): m is number => m !== null)
   let best: { cd: Record<number, string>; score: number } | null = null
   for (const y of [year, year - 1, year + 1]) {
     for (let m = 1; m <= 12; m++) {
-      const cd = tryDates(header, c0, y, m)
+      const cd = tryDates(header, c0, y, m, wrow)
       if (!cd) continue
       const w = weekdayScore(cd, wrow)
       if (w.total === 0 || w.ok / w.total < 0.9) continue
@@ -195,7 +250,7 @@ function blockDates(header: Cell[], wrow: Cell[] | undefined, c0: number, year: 
   }
   if (best) return best.cd
   // Sin pistas suficientes: el error del mes escrito explica el problema.
-  return columnDates(header, c0, year, prefer[0] ?? 1)
+  return columnDates(header, c0, year, prefer[0] ?? 1, wrow)
 }
 
 export function parsePlantilla(rows: Cell[][], hints: ParseHints = {}): ParsedPlantilla {
@@ -214,7 +269,7 @@ export function parsePlantilla(rows: Cell[][], hints: ParseHints = {}): ParsedPl
   const year = yearNear(rows, h) ?? fromName.year ?? hints.year ?? null
   if (year === null) throw new Error('No encuentro el año en la cabecera.')
   const month = monthNear(rows, h, c0)
-  if (month === null && fromName.month === null && weekdayScore(columnDates(rows[h], c0, year, 1), rows[h + 1]).total === 0) {
+  if (month === null && fromName.month === null && weekdayScore(tryDates(rows[h], c0, year, 1) ?? {}, rows[h + 1]).total === 0) {
     throw new Error('No encuentro el nombre del mes encima del día 1 ni en el nombre de la pestaña.')
   }
 
