@@ -1,15 +1,14 @@
 import { useMemo, useState } from 'react'
 import { allDates, recommend, type Candidate } from '../domain/engine'
 import { codeLabel } from '../domain/legend'
-import { fmtShort } from '../domain/dates'
+import { defaultDate, fmtShort } from '../domain/dates'
 import { registerCambio } from '../domain/state'
 import type { AppState } from '../domain/types'
 import { CodeChip, shortName } from './common'
 
 export function ChangeView({ state, setState, goSettings }: { state: AppState; setState: (s: AppState) => void; goSettings: () => void }) {
   const dates = useMemo(() => allDates(state.grid), [state.grid])
-  const today = new Date().toISOString().slice(0, 10)
-  const [date, setDate] = useState(() => (dates.includes(today) ? today : dates[0] ?? today))
+  const [date, setDate] = useState(() => defaultDate(dates))
   const [onlyWithReturn, setOnlyWithReturn] = useState(false)
   const [showDiscarded, setShowDiscarded] = useState(false)
   const [pending, setPending] = useState<{ c: Candidate; returnDate?: string; msg: string } | null>(null)

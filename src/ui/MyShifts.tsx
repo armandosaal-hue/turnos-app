@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { daysInMonth, fmtShort, isoDate, MONTHS, weekday } from '../domain/dates'
+import { daysInMonth, fmtShort, isoDate, MONTHS, todayIso, weekday } from '../domain/dates'
 import { codeLabel } from '../domain/legend'
 import { violations } from '../domain/rules'
 import { clearManual, editCells, ensureMe } from '../domain/state'
@@ -21,7 +21,7 @@ const CLEAR = '__borrar__'
 // Mis propios turnos: corregir o meter días que la plantilla aún no recoge.
 export function MyShifts({ state, setState }: { state: AppState; setState: (s: AppState) => void }) {
   const meId = state.meId
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [month, setMonth] = useState(() => todayIso().slice(0, 7))
   const [brush, setBrush] = useState<string | null>(null)
   const [other, setOther] = useState('')
   const [range, setRange] = useState({ from: '', to: '' })

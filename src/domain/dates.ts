@@ -47,3 +47,15 @@ export function minutesOf(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number)
   return h * 60 + (m || 0)
 }
+
+// Hoy en hora local: a las 00:30 en España, en UTC todavía es el día anterior.
+export function todayIso(): string {
+  const d = new Date()
+  return isoDate(d.getFullYear(), d.getMonth() + 1, d.getDate())
+}
+
+// Fecha inicial de una lista ordenada: hoy si está; si no, la primera posterior; si no, la última.
+export function defaultDate(sorted: string[], today = todayIso()): string {
+  if (!sorted.length) return today
+  return sorted.find((d) => d >= today) ?? sorted[sorted.length - 1]
+}

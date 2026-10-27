@@ -39,50 +39,47 @@ export function personKey(rawName: string): { id: string; name: string; note: st
   return { id: name.toUpperCase(), name, note }
 }
 
-export function parsePlantilla(rows: Cell[][]): ParsedPlantilla {
-  const warnings: string[] = []
-
-  // 1. Fila de cabecera: la primera con 1 y 2 en columnas consecutivas.
-  let h = -1
-  let c0 = -1
-  for (let r = 0; r < Math.min(rows.length, 15) && h < 0; r++) {
-    const row = rows[r] ?? []
-    for (let c = 0; c < row.length - 1; c++) {
-      if (dayNumber(row[c]) === 1 && dayNumber(row[c + 1]) === 2) {
-        h = r
-        c0 = c
-        break
-      }
-    }
+// Columna del día 1 en una fila de días (1 y 2 seguidos), o -1.
+function headerCol(row: Cell[]): number {
+  for (let c = 0; c < row.length - 1; c++) {
+    if (dayNumber(row[c]) === 1 && dayNumber(row[c + 1]) === 2) return c
   }
-  if (h < 0) throw new Error('No encuentro la fila con los días del mes (1, 2, 3…).')
+  return -1
+}
 
-  // 2. Año y mes inicial.
-  let year: number | null = null
-  for (let r = 0; r <= h && year === null; r++) {
-    for (const v of rows[r] ?? []) {
-      const t = text(v)
-      if (/^20\d\d(\.0)?$/.test(t)) {
-        year = Number(t)
-        break
-      }
-    }
-  }
-  if (year === null) throw new Error('No encuentro el año en la cabecera.')
-
-  let month: number | null = null
-  if (h > 0) {
+// Mes escrito cerca de una fila de días: letra a letra sobre el día 1 ("N O V…")
+// o como palabra en alguna celda ("NOVIEMBRE", "Noviembre 2026").
+function monthNear(rows: Cell[][], h: number, c0: number): number | null {
+  for (const r of [h - 1, h - 2, h]) {
+    const row = rows[r]
+    if (!row) continue
     let word = ''
-    const above = rows[h - 1] ?? []
-    for (let c = c0; c < above.length && /^[A-ZÁÉÍÓÚÑ]$/i.test(text(above[c])); c++) word += text(above[c]).toUpperCase()
-    const idx = MONTHS.indexOf(word)
-    if (idx >= 0) month = idx + 1
+    for (let c = c0; c < row.length && /^[A-ZÁÉÍÓÚÑ]$/i.test(text(row[c])); c++) word += text(row[c]).toUpperCase()
+    let idx = MONTHS.indexOf(word)
+    if (idx >= 0) return idx + 1
+    for (const v of row) {
+      const t = text(v).toUpperCase()
+      // Solo celdas que son el mes (con año opcional), para no confundir apellidos como "Mayo".
+      idx = MONTHS.findIndex((m) => new RegExp(`^${m}(\\s+(DE\\s+)?20\\d\\d)?$`).test(t))
+      if (idx >= 0) return idx + 1
+    }
   }
-  if (month === null) throw new Error('No encuentro el nombre del mes encima del día 1.')
+  return null
+}
 
-  // 3. Columna -> fecha.
+function yearNear(rows: Cell[][], h: number): number | null {
+  for (const r of [h, h - 1, h - 2]) {
+    for (const v of rows[r] ?? []) {
+      const m = text(v).match(/(^|\D)(20\d\d)(\.0)?(\D|$)/)
+      if (m) return Number(m[2])
+    }
+  }
+  return null
+}
+
+// Columna -> fecha a partir de una fila de días. Si la numeración vuelve a empezar, pasa de mes.
+function columnDates(header: Cell[], c0: number, year: number, month: number): Record<number, string> {
   const colDate: Record<number, string> = {}
-  const header = rows[h]
   let prev = 0
   let y = year
   let m = month
@@ -100,20 +97,42 @@ export function parsePlantilla(rows: Cell[][]): ParsedPlantilla {
     colDate[c] = isoDate(y, m, d)
     prev = d
   }
-  const cols = Object.keys(colDate).map(Number)
-  const from = colDate[cols[0]]
-  const to = colDate[cols[cols.length - 1]]
+  return colDate
+}
 
-  // 4. Comprobación con la fila de días de la semana.
-  const wrow = rows[h + 1] ?? []
-  let mismatches = 0
-  for (const c of cols) {
-    const t = text(wrow[c]).toUpperCase()
-    if (t && t !== WEEKDAY_LETTER[weekday(colDate[c])]) mismatches++
+export function parsePlantilla(rows: Cell[][]): ParsedPlantilla {
+  const warnings: string[] = []
+
+  // 1. Primera fila de días.
+  let h = -1
+  let c0 = -1
+  for (let r = 0; r < Math.min(rows.length, 15) && h < 0; r++) {
+    c0 = headerCol(rows[r] ?? [])
+    if (c0 >= 0) h = r
   }
-  if (mismatches) warnings.push(`${mismatches} días no coinciden con la letra del día de la semana. Revisa el mes y el año.`)
+  if (h < 0) throw new Error('No encuentro la fila con los días del mes (1, 2, 3…).')
 
-  // 5. Filas de personas, por bloques y secciones.
+  const year = yearNear(rows, h)
+  if (year === null) throw new Error('No encuentro el año en la cabecera.')
+  const month = monthNear(rows, h, c0)
+  if (month === null) throw new Error('No encuentro el nombre del mes encima del día 1.')
+
+  let colDate = columnDates(rows[h], c0, year, month)
+  let cols = Object.keys(colDate).map(Number)
+
+  // Comprueba la fila de días de la semana de un bloque.
+  let mismatches = 0
+  const checkWeekdays = (hr: number) => {
+    const wrow = rows[hr + 1] ?? []
+    for (const c of cols) {
+      const t = text(wrow[c]).toUpperCase()
+      if (t && t !== WEEKDAY_LETTER[weekday(colDate[c])]) mismatches++
+    }
+  }
+  checkWeekdays(h)
+
+  // 2. Filas de personas, por bloques y secciones. Una nueva fila de días con nombre
+  // de mes empieza otro mes; sin nombre de mes es el bloque de turno fijo del mismo mes.
   const persons: Record<string, Person> = {}
   const grid: Grid = {}
   const codes: Record<string, number> = {}
@@ -121,21 +140,37 @@ export function parsePlantilla(rows: Cell[][]): ParsedPlantilla {
   let section = 'Rotatorio'
   let fixedBlock = false
   let conflicts = 0
+  let lastDate = colDate[cols[cols.length - 1]]
 
-  for (let r = h + 2; r < rows.length; r++) {
+  for (let r = h + 1; r < rows.length; r++) {
     const row = rows[r] ?? []
     const a = text(row[0])
     const b = text(row[1])
-    const dataCells = cols.filter((c) => text(row[c]) !== '')
 
     if (!a) {
-      // Nueva cabecera de bloque: solo valen las columnas que tienen día.
-      if (dataCells.length && dayNumber(row[c0]) === 1) {
-        blockCols = cols.filter((c) => dayNumber(row[c]) !== null)
-        fixedBlock = true
+      const hc = headerCol(row)
+      if (hc >= 0) {
+        const nm = monthNear(rows, r, hc)
+        if (nm !== null) {
+          let ny = yearNear(rows, r)
+          if (ny === null) {
+            const [ly, lm] = lastDate.split('-').map(Number)
+            ny = nm < lm ? ly + 1 : ly
+          }
+          colDate = columnDates(row, hc, ny, nm)
+          cols = Object.keys(colDate).map(Number)
+          blockCols = cols
+          lastDate = colDate[cols[cols.length - 1]]
+          section = 'Rotatorio'
+          fixedBlock = false
+          checkWeekdays(r)
+        } else {
+          blockCols = cols.filter((c) => dayNumber(row[c]) !== null)
+          fixedBlock = true
+        }
         continue
       }
-      if (b && !/^\d+$/.test(b)) section = b
+      if (b && !/^\d+$/.test(b) && !headerLike(row, cols)) section = b
       continue
     }
     if (!b) continue
@@ -159,6 +194,7 @@ export function parsePlantilla(rows: Cell[][]): ParsedPlantilla {
       else if (code !== PLACEHOLDER && code !== cur) conflicts++
     }
   }
+  if (mismatches) warnings.push(`${mismatches} días no coinciden con la letra del día de la semana. Revisa el mes y el año.`)
   if (conflicts) warnings.push(`${conflicts} días con valores distintos en filas repetidas de una misma persona; se ha mantenido el de la primera fila.`)
 
   for (const row of Object.values(grid)) {
@@ -167,7 +203,48 @@ export function parsePlantilla(rows: Cell[][]): ParsedPlantilla {
   if (!Object.keys(persons).length) throw new Error('No encuentro filas de personas (número en la columna A y nombre en la B).')
   if (codes[BLANK] === undefined) warnings.push('No hay celdas vacías: revisa si el diurno aparece con otro código.')
 
-  return { persons, grid, from, to, codes, warnings }
+  const all = Object.values(grid).flatMap((r) => Object.keys(r)).sort()
+  return { persons, grid, from: all[0], to: all[all.length - 1], codes, warnings }
+}
+
+// Fila de días de la semana (L M X J V S D) o de letras del mes: no es un rótulo de sección.
+function headerLike(row: Cell[], cols: number[]): boolean {
+  const letters = cols.filter((c) => /^[A-ZÁÉÍÓÚÑ]$/i.test(text(row[c]))).length
+  return letters >= Math.min(5, cols.length)
+}
+
+// Une plantillas leídas de varias hojas del mismo archivo.
+export function mergeParsed(parts: ParsedPlantilla[]): ParsedPlantilla {
+  if (parts.length === 1) return parts[0]
+  const persons: Record<string, Person> = {}
+  const grid: Grid = {}
+  const warnings: string[] = []
+  let conflicts = 0
+  for (const p of parts) {
+    warnings.push(...p.warnings)
+    for (const [id, person] of Object.entries(p.persons)) persons[id] ??= person
+    for (const [id, row] of Object.entries(p.grid)) {
+      const target = (grid[id] ??= {})
+      for (const [date, code] of Object.entries(row)) {
+        if (target[date] === undefined) target[date] = code
+        else if (target[date] !== code) conflicts++
+      }
+    }
+  }
+  if (conflicts) warnings.push(`${conflicts} días con valores distintos entre hojas; se ha mantenido el de la primera hoja.`)
+  const codes: Record<string, number> = {}
+  for (const row of Object.values(grid)) for (const c of Object.values(row)) codes[c] = (codes[c] ?? 0) + 1
+  const all = Object.values(grid).flatMap((r) => Object.keys(r)).sort()
+  return { persons, grid, from: all[0], to: all[all.length - 1], codes, warnings: [...new Set(warnings)] }
+}
+
+// Meses que trae una plantilla, con cuántas personas tienen datos en cada uno.
+export function monthsSummary(p: ParsedPlantilla): { month: string; persons: number }[] {
+  const by: Record<string, Set<string>> = {}
+  for (const [id, row] of Object.entries(p.grid)) for (const d of Object.keys(row)) (by[d.slice(0, 7)] ??= new Set()).add(id)
+  return Object.keys(by)
+    .sort()
+    .map((month) => ({ month, persons: by[month].size }))
 }
 
 // CSV sencillo (separador ; o ,) a filas.

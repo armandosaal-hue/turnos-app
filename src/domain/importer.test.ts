@@ -1,4 +1,4 @@
-import { parsePlantilla, parseCsv, FIXED_BLANK } from './importer'
+import { parsePlantilla, parseCsv, FIXED_BLANK, mergeParsed, monthsSummary } from './importer'
 
 const header = (n: number, start = 1) => Array.from({ length: n }, (_, i) => ((start + i - 1) % 31) + 1)
 
@@ -60,5 +60,71 @@ describe('importador', () => {
   it('lee CSV con punto y coma', () => {
     const r = parseCsv('a;b\n"x;y";2')
     expect(r).toEqual([['a', 'b'], ['x;y', '2']])
+  })
+})
+
+describe('varios meses en un archivo', () => {
+  const oct = [
+    [null, null, 'O', 'C', 'T', 'U', 'B', 'R', 'E'],
+    [null, '2026', 1, 2, 3],
+    [null, null, 'J', 'V', 'S'],
+    [1, 'A, ANA', 'N', 'D', 'L'],
+    [2, 'MAYO GIL, EVA', '', 'L', 'N'],
+    [null, null, 1, 2, 3],
+    [null, 'ENFERMERAS', 'J', 'V', 'S'],
+    [null, 'MAÑANA'],
+    [101, 'M, LUZ', 'M', 'M', ''],
+  ]
+  const nov = [
+    [null, null, 'N', 'O', 'V', 'I', 'E', 'M', 'B', 'R', 'E'],
+    [null, null, 1, 2, 3],
+    [null, null, 'D', 'L', 'M'],
+    [1, 'A, ANA', 'L', '', 'N'],
+    [2, 'MAYO GIL, EVA', 'N', 'D', 'L'],
+  ]
+
+  it('lee noviembre debajo de octubre con sus propias fechas y como rotatorio', () => {
+    const p = parsePlantilla([...oct, ...nov])
+    expect(p.from).toBe('2026-10-01')
+    expect(p.to).toBe('2026-11-03')
+    expect(p.warnings).toEqual([])
+    expect(p.grid['A, ANA']).toEqual({
+      '2026-10-01': 'N', '2026-10-02': 'D', '2026-10-03': 'L',
+      '2026-11-01': 'L', '2026-11-02': '', '2026-11-03': 'N',
+    })
+    expect(p.persons['A, ANA'].candidate).toBe(true)
+    // El bloque de mañana de octubre sigue siendo turno fijo.
+    expect(p.persons['M, LUZ'].candidate).toBe(false)
+    expect(monthsSummary(p)).toEqual([
+      { month: '2026-10', persons: 3 },
+      { month: '2026-11', persons: 2 },
+    ])
+  })
+
+  it('un mes con nombre en una celda ("Noviembre 2026") y paso de diciembre a enero', () => {
+    const dic = [[null, 'DICIEMBRE 2026'], [null, null, 1, 2], [null, null, 'M', 'X'], [1, 'A, ANA', 'N', 'D']]
+    const ene = [[null, 'Enero'], [null, null, 1, 2], [null, null, 'V', 'S'], [1, 'A, ANA', 'L', '']]
+    const p = parsePlantilla([...dic, ...ene])
+    expect(p.grid['A, ANA']).toEqual({ '2026-12-01': 'N', '2026-12-02': 'D', '2027-01-01': 'L', '2027-01-02': '' })
+    expect(p.warnings).toEqual([])
+  })
+
+  it('une meses que vienen en pestañas distintas', () => {
+    const a = parsePlantilla(oct)
+    const b = parsePlantilla([[null, '2026', ...nov[0].slice(2)], ...nov.slice(1)].map((r, i) => (i === 0 ? [null, null, ...nov[0].slice(2)] : r)).map((r, i) => (i === 1 ? [null, '2026', 1, 2, 3] : r)))
+    const m = mergeParsed([a, b])
+    expect(Object.keys(m.grid['A, ANA'])).toHaveLength(6)
+    expect(m.to).toBe('2026-11-03')
+  })
+})
+
+import { defaultDate } from './dates'
+describe('fecha inicial', () => {
+  const d = ['2026-01-05', '2026-10-01', '2026-11-30']
+  it('hoy, la siguiente cargada o la última', () => {
+    expect(defaultDate([...d, '2026-10-27'].sort(), '2026-10-27')).toBe('2026-10-27')
+    expect(defaultDate(d, '2026-06-01')).toBe('2026-10-01')
+    expect(defaultDate(d, '2027-01-01')).toBe('2026-11-30')
+    expect(defaultDate(['2026-01', '2026-10'], '2026-10')).toBe('2026-10')
   })
 })

@@ -277,3 +277,33 @@ describe('mis turnos a mano', () => {
     expect(recommend(s, 'YO', day(2)).type).toBe('quitar')
   })
 })
+
+describe('cada archivo sustituye a lo anterior', () => {
+  it('borra los meses y personas que no trae y conserva lo manual dentro de sus meses', () => {
+    // Estado: marzo cargado (YO y ANA) y BEA, que no estará en el archivo nuevo.
+    let s = state({ YO: 'L _ L', ANA: 'N D L', BEA: 'L L L' })
+    s = editCells(s, 'YO', ['2026-04-02'], 'V') // mi día manual en abril
+    s = editCells(s, 'YO', ['2026-05-10'], 'B') // fuera de los meses del archivo nuevo
+    const parsed = {
+      persons: { ANA: person('ANA'), CARLA: person('CARLA') },
+      grid: {
+        ANA: { '2026-04-01': 'N', '2026-04-02': 'D' },
+        CARLA: { '2026-04-01': 'L', '2026-04-02': '' },
+      },
+      from: '2026-04-01',
+      to: '2026-04-02',
+      codes: {},
+      warnings: [],
+    }
+    s = { ...s, meId: 'YO' }
+    const a = analyzeImport(s, parsed)
+    expect(a.removedMonths).toEqual(['2026-03', '2026-05'])
+    expect(a.removedPersons).toBe(1) // BEA (YO soy yo y no cuenta)
+    s = applyImport(s, parsed, a, 'abril.xlsx')
+    expect(Object.keys(s.persons).sort()).toEqual(['ANA', 'CARLA', 'YO'])
+    expect(s.grid.ANA).toEqual({ '2026-04-01': 'N', '2026-04-02': 'D' })
+    expect(s.grid.YO).toEqual({ '2026-04-02': 'V' }) // marzo y mayo borrados; el manual de abril se queda
+    expect(s.origins.YO['2026-04-02']).toMatchObject({ origin: 'manual' })
+    expect(s.grid.BEA).toBeUndefined()
+  })
+})

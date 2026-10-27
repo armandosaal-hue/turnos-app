@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { allDates } from '../domain/engine'
 import { codeLabel, displayCode } from '../domain/legend'
-import { fmtShort, MONTHS, weekday, WEEKDAY_LETTER } from '../domain/dates'
+import { defaultDate, fmtShort, MONTHS, todayIso, weekday, WEEKDAY_LETTER } from '../domain/dates'
 import { editCell } from '../domain/state'
 import type { AppState } from '../domain/types'
 import { normalize } from './common'
@@ -10,8 +10,7 @@ import { MyShifts } from './MyShifts'
 export function CalendarView({ state, setState }: { state: AppState; setState: (s: AppState) => void }) {
   const dates = useMemo(() => allDates(state.grid), [state.grid])
   const months = useMemo(() => [...new Set(dates.map((d) => d.slice(0, 7)))], [dates])
-  const thisMonth = new Date().toISOString().slice(0, 7)
-  const [month, setMonth] = useState(() => (months.includes(thisMonth) ? thisMonth : months[0]))
+  const [month, setMonth] = useState(() => defaultDate(months, todayIso().slice(0, 7)))
   const [mode, setMode] = useState<'yo' | 'unidad'>('yo')
   const [q, setQ] = useState('')
   const [edit, setEdit] = useState<{ personId: string; date: string } | null>(null)

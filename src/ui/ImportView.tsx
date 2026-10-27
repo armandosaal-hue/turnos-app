@@ -1,8 +1,8 @@
 import { lazy, Suspense, useState } from 'react'
-import { readSheet } from 'read-excel-file/universal'
-import { parseCsv, parsePlantilla, type Cell, type ParsedPlantilla } from '../domain/importer'
+import readXlsxFile from 'read-excel-file/universal'
+import { mergeParsed, monthsSummary, parseCsv, parsePlantilla, type Cell, type ParsedPlantilla } from '../domain/importer'
 import { codeLabel, suggestCode } from '../domain/legend'
-import { fmtShort } from '../domain/dates'
+import { fmtShort, MONTHS } from '../domain/dates'
 import { analyzeImport, applyImport, unknownCodes, type ImportAnalysis } from '../domain/state'
 import type { AppState, Kind, ShiftCode } from '../domain/types'
 import { CodeChip } from './common'
@@ -78,8 +78,8 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
     const file = files[i]
     setBusy(true)
     try {
-      const rows = kinds[i] === 'csv' ? parseCsv(await file.text()) : ((await readSheet(file)) as Cell[][])
-      next(parsePlantilla(rows), file.name)
+      if (kinds[i] === 'csv') next(parsePlantilla(parseCsv(await file.text())), file.name)
+      else next(parseWorkbook((await readXlsxFile(file)) as { sheet: string; data: Cell[][] }[]), file.name)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -170,8 +170,22 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
           {parsed.warnings.map((w) => (
             <p key={w} className="warn">{w}</p>
           ))}
+          <p>
+            Meses:{' '}
+            {monthsSummary(parsed)
+              .map((m) => `${monthName(m.month)} (${m.persons} personas)`)
+              .join(' · ')}
+          </p>
           {!first && analysis.newPersons.length > 0 && <p>Personas nuevas: {analysis.newPersons.join(', ')}</p>}
         </div>
+        {!first && (analysis.removedMonths.length > 0 || analysis.removedPersons > 0) && (
+          <p className="warn">
+            Al guardar, la app se queda solo con este archivo.
+            {analysis.removedMonths.length > 0 && ` Se borrarán ${analysis.removedMonths.map(monthName).join(', ')}.`}
+            {analysis.removedPersons > 0 && ` Dejan de aparecer ${analysis.removedPersons} personas que no están en el archivo.`}
+            {' '}Tus cambios registrados se conservan en la pestaña Cambios.
+          </p>
+        )}
         {!first && (
           <>
             {analysis.confirmedCambios.length > 0 && (
@@ -272,6 +286,26 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
       ))}
     </div>
   )
+}
+
+function monthName(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  return `${MONTHS[m - 1].toLowerCase()} ${y}`
+}
+
+// Lee todas las pestañas con fila de días y las une. Las demás pestañas se ignoran.
+function parseWorkbook(sheets: { sheet: string; data: Cell[][] }[]): ParsedPlantilla {
+  const parts: ParsedPlantilla[] = []
+  let firstError: unknown
+  for (const s of sheets) {
+    try {
+      parts.push(parsePlantilla(s.data))
+    } catch (e) {
+      firstError ??= e
+    }
+  }
+  if (!parts.length) throw firstError ?? new Error('El archivo no tiene ninguna hoja con plantilla.')
+  return mergeParsed(parts)
 }
 
 export function CodeKindFields({ def, onChange }: { def: ShiftCode; onChange: (p: Partial<ShiftCode>) => void }) {

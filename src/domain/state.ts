@@ -39,6 +39,14 @@ export interface ImportAnalysis {
   newPersons: string[]
   confirmedCambios: string[] // ids de cambios que la plantilla ya recoge
   notReflected: string[] // ids de cambios pendientes que la plantilla no recoge
+  removedMonths: string[] // meses guardados ("2026-01") que no trae el archivo y se borrarán
+  removedPersons: number // personas que dejan de aparecer
+}
+
+function monthsOf(grid: Record<string, Record<string, string>>): Set<string> {
+  const out = new Set<string>()
+  for (const row of Object.values(grid)) for (const d of Object.keys(row)) out.add(d.slice(0, 7))
+  return out
 }
 
 export function analyzeImport(state: AppState, parsed: ParsedPlantilla): ImportAnalysis {
@@ -84,11 +92,15 @@ export function analyzeImport(state: AppState, parsed: ParsedPlantilla): ImportA
     else notReflected.push(c.id)
   }
   diffs.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name))
-  return { diffs, newPersons, confirmedCambios, notReflected }
+  const incoming = monthsOf(parsed.grid)
+  const removedMonths = [...monthsOf(state.grid)].filter((m) => !incoming.has(m)).sort()
+  const removedPersons = Object.keys(state.persons).filter((id) => !parsed.persons[id] && id !== state.meId).length
+  return { diffs, newPersons, confirmedCambios, notReflected, removedMonths, removedPersons }
 }
 
-// Aplica una plantilla. Las celdas con diferencia solo se sobrescriben si su
-// fila de diferencias está marcada; el resto de celdas de la plantilla se copian.
+// Aplica una plantilla: la tabla queda solo con lo que trae el archivo. Dentro de sus
+// meses se conservan las celdas con diferencia que no se marcan (ediciones manuales y
+// cambios pendientes) y mis días manuales que el archivo no trae. Lo demás se borra.
 export function applyImport(
   state: AppState,
   parsed: ParsedPlantilla,
@@ -96,29 +108,41 @@ export function applyImport(
   fileName: string,
 ): AppState {
   const keep = new Set(analysis.diffs.filter((d) => !d.apply).map((d) => `${d.personId}|${d.date}`))
-  const grid = { ...state.grid }
-  const origins: Origins = { ...state.origins }
-  const persons = { ...state.persons }
+  const months = monthsOf(parsed.grid)
+  const grid: AppState['grid'] = {}
+  const origins: Origins = {}
+  const persons: AppState['persons'] = {}
 
   for (const [pid, p] of Object.entries(parsed.persons)) {
-    if (!persons[pid]) persons[pid] = p
-    else persons[pid] = { ...persons[pid], note: p.note, puesto: p.puesto, section: p.section }
+    const old = state.persons[pid]
+    persons[pid] = old ? { ...old, note: p.note, puesto: p.puesto, section: p.section } : p
   }
   for (const [pid, row] of Object.entries(parsed.grid)) {
-    const target = { ...(grid[pid] ?? {}) }
-    const o = { ...(origins[pid] ?? {}) }
+    const target: Record<string, string> = {}
+    const o: Origins[string] = {}
     for (const [date, code] of Object.entries(row)) {
-      if (keep.has(`${pid}|${date}`)) {
-        // Se mantiene lo manual, pero "volver a la plantilla" debe llevar a esta versión.
-        const prev = o[date]
-        if (prev?.origin === 'manual') o[date] = { origin: 'manual', before: code }
-        continue
-      }
-      target[date] = code
-      delete o[date]
+      const prev = state.origins[pid]?.[date]
+      if (keep.has(`${pid}|${date}`) && prev) {
+        target[date] = state.grid[pid][date]
+        // "Volver a la plantilla" debe llevar a esta versión.
+        o[date] = prev.origin === 'manual' ? { origin: 'manual', before: code } : prev
+      } else target[date] = code
     }
     grid[pid] = target
     origins[pid] = o
+  }
+  // Días cambiados a mano o por un cambio, dentro de los meses del archivo, que el archivo no trae.
+  for (const [pid, o] of Object.entries(state.origins)) {
+    for (const [date, origin] of Object.entries(o)) {
+      if (!months.has(date.slice(0, 7)) || parsed.grid[pid]?.[date] !== undefined) continue
+      ;(grid[pid] ??= {})[date] = state.grid[pid][date]
+      ;(origins[pid] ??= {})[date] = origin
+      persons[pid] ??= state.persons[pid]
+    }
+  }
+  if (state.meId && state.persons[state.meId]) {
+    persons[state.meId] ??= state.persons[state.meId]
+    grid[state.meId] ??= {}
   }
 
   const confirmed = new Set(analysis.confirmedCambios)
