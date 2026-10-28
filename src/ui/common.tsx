@@ -27,7 +27,7 @@ export function PersonPicker({
   const list = useMemo(() => {
     const n = normalize(q)
     return Object.values(persons)
-      .filter((p) => !n || normalize(p.name).includes(n))
+      .filter((p) => !n || normalize(`${p.name} ${p.puesto}`).includes(n))
       .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 30)
   }, [persons, q])
@@ -38,6 +38,7 @@ export function PersonPicker({
         {list.map((p) => (
           <button key={p.id} className={`picker-item${p.id === value ? ' sel' : ''}`} onClick={() => onChange(p.id)}>
             {p.name}
+            {p.puesto && <small> · puesto {p.puesto}</small>}
             {p.note && <small> · {p.note}</small>}
           </button>
         ))}

@@ -6,7 +6,17 @@ import { registerCambio } from '../domain/state'
 import type { AppState } from '../domain/types'
 import { CodeChip, shortName } from './common'
 
-export function ChangeView({ state, setState, goSettings }: { state: AppState; setState: (s: AppState) => void; goSettings: () => void }) {
+export function ChangeView({
+  state,
+  setState,
+  goSettings,
+  goMyShifts,
+}: {
+  state: AppState
+  setState: (s: AppState) => void
+  goSettings: () => void
+  goMyShifts: () => void
+}) {
   const dates = useMemo(() => allDates(state.grid), [state.grid])
   const [date, setDate] = useState(() => defaultDate(dates))
   const [onlyWithReturn, setOnlyWithReturn] = useState(false)
@@ -27,6 +37,11 @@ export function ChangeView({ state, setState, goSettings }: { state: AppState; s
 
   const me = state.grid[meId]
   const myCode = me[date]
+  // Las devoluciones solo se buscan en días en que la app conoce mi turno.
+  const month = date.slice(0, 7)
+  const loadedInMonth = dates.filter((d) => d.startsWith(month))
+  const knownInMonth = loadedInMonth.filter((d) => me[d] !== undefined).length
+  const missingMine = loadedInMonth.length > 0 && knownInMonth < loadedInMonth.length
   const list = rec ? rec.candidates.filter((c) => !onlyWithReturn || c.returns.length) : []
 
   const register = (c: Candidate, returnDate?: string) => {
@@ -50,6 +65,16 @@ export function ChangeView({ state, setState, goSettings }: { state: AppState; s
           {fmtShort(date)} · tú: <CodeChip code={myCode} legend={state.legend} /> {codeLabel(state.legend, myCode)}
         </p>
         {rec?.error && <p className="warn">{rec.error}</p>}
+        {missingMine && (
+          <div className="notice">
+            <p>
+              Solo tengo <b>{knownInMonth} de {loadedInMonth.length}</b> días tuyos de este mes
+              {state.persons[meId]?.puesto ? '' : ' (no apareces en la plantilla)'}. Las devoluciones solo se buscan en días en que sé que libras, así que
+              faltarán opciones.
+            </p>
+            <button onClick={goMyShifts}>Meter mis turnos</button>
+          </div>
+        )}
         {rec?.type && (
           <p className="hint">
             {rec.type === 'quitar' ? 'Quitarme este turno: compañeros que pueden cubrirlo.' : 'Ponerme a trabajar: compañeros que pueden cederme su turno.'}
@@ -68,7 +93,7 @@ export function ChangeView({ state, setState, goSettings }: { state: AppState; s
             {list.length} {list.length === 1 ? 'candidato' : 'candidatos'}
           </h2>
           {list.map((c, i) => (
-            <CandidateCard key={c.personId} rank={i + 1} c={c} state={state} type={rec.type!} onRegister={register} />
+            <CandidateCard key={c.personId} rank={i + 1} c={c} state={state} type={rec.type!} onRegister={register} missingMine={missingMine} />
           ))}
           <button className="link" onClick={() => setShowDiscarded(!showDiscarded)}>
             {showDiscarded ? 'Ocultar' : 'Ver'} descartados ({rec.discarded.length})
@@ -114,12 +139,14 @@ function CandidateCard({
   state,
   type,
   onRegister,
+  missingMine,
 }: {
   rank: number
   c: Candidate
   state: AppState
   type: 'quitar' | 'trabajar'
   onRegister: (c: Candidate, returnDate?: string) => void
+  missingMine: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [all, setAll] = useState(false)
@@ -131,7 +158,11 @@ function CandidateCard({
         <div className="cand-main">
           <b>{state.persons[c.personId]?.name}</b>
           <small>
-            {c.returns.length ? `${c.returns.length} devoluciones posibles` : 'sin devolución posible'}
+            {c.returns.length
+              ? `${c.returns.length} devoluciones posibles`
+              : missingMine
+                ? 'sin devolución en los días tuyos que conozco'
+                : 'sin devolución posible'}
             {c.balance > 0 && ` · te debe ${c.balance}`}
             {c.balance < 0 && ` · le debes ${-c.balance}`}
           </small>

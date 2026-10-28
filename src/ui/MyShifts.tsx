@@ -4,7 +4,7 @@ import { codeLabel } from '../domain/legend'
 import { violations } from '../domain/rules'
 import { clearManual, editCells, ensureMe } from '../domain/state'
 import type { AppState } from '../domain/types'
-import { CodeChip } from './common'
+import { CodeChip, PersonPicker } from './common'
 
 const QUICK: [string, string][] = [
   ['', 'Diurno'],
@@ -27,6 +27,8 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
   const [range, setRange] = useState({ from: '', to: '' })
   const [edit, setEdit] = useState<string | null>(null)
   const [name, setName] = useState('')
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copyFrom, setCopyFrom] = useState<string | undefined>()
 
   const [y, m] = month.split('-').map(Number)
   const days = useMemo(() => Array.from({ length: daysInMonth(y, m) }, (_, i) => isoDate(y, m, i + 1)), [y, m])
@@ -160,6 +162,45 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
             </button>
           )
         })}
+      </div>
+      <div className="card">
+        <button className="link" onClick={() => setCopyOpen(!copyOpen)}>
+          {copyOpen ? '▴' : '▾'} Copiar el mes de otra fila de la plantilla
+        </button>
+        {copyOpen && (
+          <>
+            <p className="hint">
+              Útil si ocupas el puesto o sigues la rotación de otra persona: se copian sus días de {MONTHS[m - 1].toLowerCase()} a tu calendario como cambios a
+              mano, y luego corriges lo que no coincida. Los días que ya tienes no se tocan.
+            </p>
+            <PersonPicker
+              persons={Object.fromEntries(Object.entries(state.persons).filter(([id]) => id !== meId))}
+              value={copyFrom}
+              onChange={setCopyFrom}
+              placeholder="Buscar persona o puesto…"
+            />
+            {copyFrom && (
+              <div className="row">
+                <span>
+                  Copiar {MONTHS[m - 1].toLowerCase()} de <b>{state.persons[copyFrom]?.name}</b>
+                </span>
+                <button
+                  className="primary"
+                  onClick={() => {
+                    const src = state.grid[copyFrom] ?? {}
+                    let next = state
+                    for (const d of days) if (src[d] !== undefined && row[d] === undefined) next = editCells(next, meId, [d], src[d])
+                    setState(next)
+                    setCopyOpen(false)
+                    setCopyFrom(undefined)
+                  }}
+                >
+                  Copiar
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
       <p className="hint legend-line">
         Borde discontinuo con punto: cambiado a mano. Sin punto: cambio registrado. "–": sin dato.

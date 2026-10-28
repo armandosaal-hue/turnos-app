@@ -71,7 +71,7 @@ export function App() {
       )}
       <main>
         <ErrorBoundary key={tab}>
-        {tab === 'cambiar' && <ChangeView state={state} setState={setState} goSettings={() => setTab('ajustes')} />}
+        {tab === 'cambiar' && <ChangeView state={state} setState={setState} goSettings={() => setTab('ajustes')} goMyShifts={() => setTab('calendario')} />}
         {tab === 'calendario' && <CalendarView state={state} setState={setState} />}
         {tab === 'cargar' && <ImportView state={state} setState={setState} />}
         {tab === 'cambios' && <CambiosView state={state} setState={setState} />}
