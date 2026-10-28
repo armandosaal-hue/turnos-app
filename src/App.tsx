@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppState } from './domain/types'
 import { loadState, saveState } from './store'
-import { ChangeView } from './ui/ChangeView'
+import { ChangeView, emptyChangeUi, type ChangeUi } from './ui/ChangeView'
 import { CalendarView } from './ui/CalendarView'
 import { ImportView } from './ui/ImportView'
 import { CambiosView } from './ui/CambiosView'
@@ -18,6 +18,18 @@ const TABS: [Tab, string, string][] = [
   ['ajustes', 'Ajustes', '⚙'],
 ]
 
+const CHANGE_UI_KEY = 'turnos-cambiar'
+
+function loadChangeUi(): ChangeUi {
+  try {
+    const raw = localStorage.getItem(CHANGE_UI_KEY)
+    if (raw) return { ...emptyChangeUi, ...JSON.parse(raw) }
+  } catch {
+    // ignorado: se empieza en blanco
+  }
+  return emptyChangeUi
+}
+
 export function App() {
   const [state, setStateRaw] = useState<AppState | null>(null)
   const [tab, setTab] = useState<Tab>('cambiar')
@@ -25,6 +37,15 @@ export function App() {
   const timer = useRef<number>()
 
   const [globalError, setGlobalError] = useState('')
+  const [changeUi, setChangeUiRaw] = useState<ChangeUi>(loadChangeUi)
+  const setChangeUi = useCallback((u: ChangeUi) => {
+    setChangeUiRaw(u)
+    try {
+      localStorage.setItem(CHANGE_UI_KEY, JSON.stringify(u))
+    } catch {
+      // sin almacenamiento: se mantiene mientras la app siga abierta
+    }
+  }, [])
 
   // Errores fuera de React (promesas, carga de código): se muestran en vez de bloquear la pantalla.
   useEffect(() => {
@@ -71,7 +92,7 @@ export function App() {
       )}
       <main>
         <ErrorBoundary key={tab}>
-        {tab === 'cambiar' && <ChangeView state={state} setState={setState} goSettings={() => setTab('ajustes')} goMyShifts={() => setTab('calendario')} />}
+        {tab === 'cambiar' && <ChangeView state={state} setState={setState} goSettings={() => setTab('ajustes')} goMyShifts={() => setTab('calendario')} ui={changeUi} setUi={setChangeUi} />}
         {tab === 'calendario' && <CalendarView state={state} setState={setState} />}
         {tab === 'cargar' && <ImportView state={state} setState={setState} />}
         {tab === 'cambios' && <CambiosView state={state} setState={setState} />}

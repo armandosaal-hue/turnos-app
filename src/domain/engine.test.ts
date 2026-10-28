@@ -113,6 +113,24 @@ describe('devoluciones', () => {
     expect(r.candidates[0].returns).toHaveLength(0)
   })
 
+  it('evalúa la fecha de devolución que propongo y explica por qué no vale', () => {
+    const s = state({
+      //    1 2 3 4 5 6 7
+      YO: '  L L _ N L L L',
+      ANA: ' L L L L _ _ L',
+      BEA: ' L L L L L L L',
+    })
+    const ok = recommend(s, 'YO', day(3), { preferredReturn: day(6) })
+    const ana = ok.candidates.find((c) => c.personId === 'ANA')!
+    expect(ana.preferred && 'option' in ana.preferred && ana.preferred.option.date).toBe(day(6))
+    const bea = ok.candidates.find((c) => c.personId === 'BEA')!
+    expect(bea.preferred && 'reason' in bea.preferred && bea.preferred.reason).toMatch(/no tiene turno/)
+    const bad = recommend(s, 'YO', day(3), { preferredReturn: day(5) })
+    const ana5 = bad.candidates.find((c) => c.personId === 'ANA')!
+    expect(ana5.preferred && 'reason' in ana5.preferred && ana5.preferred.reason).toMatch(/a ti te deja 24 h/)
+    expect(recommend(s, 'YO', day(3)).candidates[0].preferred).toBeUndefined()
+  })
+
   it('ordena primero a quien tiene devoluciones', () => {
     const s = state({
       YO: ' L _ L L',

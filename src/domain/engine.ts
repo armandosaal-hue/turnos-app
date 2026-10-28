@@ -20,6 +20,7 @@ export interface Candidate {
   softIssues: string[]
   balance: number
   returns: ReturnOption[]
+  preferred?: { option: ReturnOption } | { reason: string } // solo si propongo fecha de devolución
 }
 
 export interface Discarded {
@@ -133,7 +134,64 @@ export function balanceWith(cambios: Cambio[], partnerId: string): number {
   return b
 }
 
-export function recommend(state: AppState, meId: string, date: string): Recommendation {
+interface Pair {
+  ctx: Ctx
+  type: CambioType
+  date: string
+  shift: string // turno que se mueve el día D
+  me: Row
+  row: Row
+  meAfter: Row
+  pAfter: Row
+  partnerName: string
+}
+
+// Devolución en el día R: se intercambian los papeles del día D.
+// Devuelve la opción válida o el motivo por el que no vale.
+export function checkReturn(pair: Pair, r: string): { option: ReturnOption } | { reason: string } {
+  const { ctx, type, date, shift, me, row, meAfter, pAfter } = pair
+  const name = firstName(pair.partnerName)
+  if (r === date) return { reason: 'es el mismo día del cambio' }
+  const giver = type === 'quitar' ? row : me // quien tiene turno en R
+  const taker = type === 'quitar' ? me : row // quien lo cubre en R
+  const giverCode = giver[r]
+  if (!isSwappable(ctx, giverCode)) {
+    const who = type === 'quitar' ? `${name} no tiene` : 'no tienes'
+    return { reason: giverCode === undefined ? `sin datos de ${type === 'quitar' ? name : 'ti'} ese día` : `${who} turno de 12 h ese día (${codeLabel(ctx.legend, giverCode)})` }
+  }
+  const busy = unavailableReason(ctx, taker, r)
+  if (busy) return { reason: type === 'quitar' ? `tú: ${busy}` : `${name}: ${busy}` }
+  const takerCode = taker[r]
+  const meRet: Row = { ...meAfter, [r]: type === 'quitar' ? giverCode : takerCode }
+  const pRet: Row = { ...pAfter, [r]: type === 'quitar' ? takerCode : giverCode }
+  const m2 = hardAndSoft(ctx, me, meRet)
+  if (m2.hard.length) return { reason: `a ti te deja ${m2.hard[0].message}` }
+  const p2 = hardAndSoft(ctx, row, pRet)
+  if (p2.hard.length) return { reason: `a ${name} le deja ${p2.hard[0].message}` }
+  const notes: string[] = []
+  let score = 100 - Math.abs(dayIndex(r) - dayIndex(date))
+  if (giverCode === shift) {
+    score += 15
+    notes.push('mismo turno')
+  }
+  if (isWeekend(r) === isWeekend(date)) score += 5
+  if (isWeekend(r) && isWeekend(date)) notes.push('finde por finde')
+  const myFit = fitScore(ctx, meRet, r, type === 'quitar' ? 'recibe' : 'cede')
+  const theirFit = fitScore(ctx, pRet, r, type === 'quitar' ? 'cede' : 'recibe')
+  score += myFit.score + theirFit.score
+  if (myFit.note) notes.push(`a ti: ${myFit.note}`)
+  if (theirFit.note) notes.push(`a ${name}: ${theirFit.note}`)
+  const soft = [...m2.soft, ...p2.soft]
+  score -= soft.length * 20
+  for (const s of soft) notes.push(`aviso: ${s.message}`)
+  return { option: { date: r, myCode: me[r], partnerCode: row[r], score, notes } }
+}
+
+export interface RecommendOptions {
+  preferredReturn?: string // devolución que propongo yo
+}
+
+export function recommend(state: AppState, meId: string, date: string, opts: RecommendOptions = {}): Recommendation {
   const ctx: Ctx = { legend: state.legend, rules: state.rules, grid: state.grid }
   const me = state.grid[meId]
   const empty = { candidates: [], discarded: [] }
@@ -194,38 +252,12 @@ export function recommend(state: AppState, meId: string, date: string): Recommen
       continue
     }
 
+    const pair: Pair = { ctx, type, date, shift, me, row, meAfter, pAfter, partnerName: p.name }
     const returns: ReturnOption[] = []
     for (const r of dates) {
       if (r === date) continue
-      // Devolución: en R se intercambian los papeles.
-      const giver = type === 'quitar' ? row : me // quien tiene turno en R
-      const taker = type === 'quitar' ? me : row // quien lo cubre en R
-      const giverCode = giver[r]
-      if (!isSwappable(ctx, giverCode)) continue
-      if (unavailableReason(ctx, taker, r)) continue
-      const takerCode = taker[r]
-      const meRet: Row = { ...meAfter, [r]: type === 'quitar' ? giverCode : takerCode }
-      const pRet: Row = { ...pAfter, [r]: type === 'quitar' ? takerCode : giverCode }
-      const m2 = hardAndSoft(ctx, me, meRet)
-      const p2 = hardAndSoft(ctx, row, pRet)
-      if (m2.hard.length || p2.hard.length) continue
-      const notes: string[] = []
-      let score = 100 - Math.abs(dayIndex(r) - dayIndex(date))
-      if (giverCode === shift) {
-        score += 15
-        notes.push('mismo turno')
-      }
-      if (isWeekend(r) === isWeekend(date)) score += 5
-      if (isWeekend(r) && isWeekend(date)) notes.push('finde por finde')
-      const myFit = fitScore(ctx, meRet, r, type === 'quitar' ? 'recibe' : 'cede')
-      const theirFit = fitScore(ctx, pRet, r, type === 'quitar' ? 'cede' : 'recibe')
-      score += myFit.score + theirFit.score
-      if (myFit.note) notes.push(`a ti: ${myFit.note}`)
-      if (theirFit.note) notes.push(`a ${firstName(p.name)}: ${theirFit.note}`)
-      const soft = [...m2.soft, ...p2.soft]
-      score -= soft.length * 20
-      for (const s of soft) notes.push(`aviso: ${s.message}`)
-      returns.push({ date: r, myCode: me[r], partnerCode: row[r], score, notes })
+      const res = checkReturn(pair, r)
+      if ('option' in res) returns.push(res.option)
     }
     returns.sort((a, b) => b.score - a.score)
 
@@ -256,7 +288,8 @@ export function recommend(state: AppState, meId: string, date: string): Recommen
       reasons.push(`Le quedarían ${run} días de trabajo seguidos`)
     }
 
-    candidates.push({ personId: p.id, name: p.name, codeOnDate: pc, score, reasons, softIssues, balance, returns })
+    const preferred = opts.preferredReturn ? checkReturn(pair, opts.preferredReturn) : undefined
+    candidates.push({ personId: p.id, name: p.name, codeOnDate: pc, score, reasons, softIssues, balance, returns, preferred })
   }
 
   candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))

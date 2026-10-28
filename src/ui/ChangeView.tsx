@@ -6,25 +6,46 @@ import { registerCambio } from '../domain/state'
 import type { AppState } from '../domain/types'
 import { CodeChip, shortName } from './common'
 
+// Lo que se elige en Cambiar. Vive en App para que no se pierda al cambiar de pestaña.
+export interface ChangeUi {
+  date?: string
+  preferredReturn?: string
+  onlyWithReturn: boolean
+  open: string[] // candidatos desplegados
+}
+
+export const emptyChangeUi: ChangeUi = { onlyWithReturn: false, open: [] }
+
 export function ChangeView({
   state,
   setState,
   goSettings,
   goMyShifts,
+  ui,
+  setUi,
 }: {
   state: AppState
   setState: (s: AppState) => void
   goSettings: () => void
   goMyShifts: () => void
+  ui: ChangeUi
+  setUi: (u: ChangeUi) => void
 }) {
   const dates = useMemo(() => allDates(state.grid), [state.grid])
-  const [date, setDate] = useState(() => defaultDate(dates))
-  const [onlyWithReturn, setOnlyWithReturn] = useState(false)
+  const date = ui.date && dates.includes(ui.date) ? ui.date : defaultDate(dates)
+  const { onlyWithReturn, preferredReturn } = ui
   const [showDiscarded, setShowDiscarded] = useState(false)
+  const [showNotValid, setShowNotValid] = useState(false)
   const [pending, setPending] = useState<{ c: Candidate; returnDate?: string; msg: string } | null>(null)
 
   const meId = state.meId
-  const rec = useMemo(() => (meId && dates.length ? recommend(state, meId, date) : null), [state, meId, date, dates.length])
+  const rec = useMemo(
+    () => (meId && dates.length ? recommend(state, meId, date, { preferredReturn }) : null),
+    [state, meId, date, dates.length, preferredReturn],
+  )
+  const setDate = (d: string) => setUi({ ...ui, date: d, preferredReturn: undefined, open: [] })
+  const toggleOpen = (id: string) =>
+    setUi({ ...ui, open: ui.open.includes(id) ? ui.open.filter((x) => x !== id) : [...ui.open, id] })
 
   if (!dates.length) return <div className="empty">Primero carga una plantilla en la pestaña <b>Cargar</b>.</div>
   if (!meId || !state.persons[meId])
@@ -42,7 +63,12 @@ export function ChangeView({
   const loadedInMonth = dates.filter((d) => d.startsWith(month))
   const knownInMonth = loadedInMonth.filter((d) => me[d] !== undefined).length
   const missingMine = loadedInMonth.length > 0 && knownInMonth < loadedInMonth.length
-  const list = rec ? rec.candidates.filter((c) => !onlyWithReturn || c.returns.length) : []
+  const all = rec ? rec.candidates.filter((c) => !onlyWithReturn || c.returns.length) : []
+  const fits = (c: Candidate) => !!c.preferred && 'option' in c.preferred
+  const list = preferredReturn ? all.filter(fits) : all
+  const notValid = preferredReturn ? all.filter((c) => !fits(c)) : []
+  const reasons = new Set(notValid.map((c) => (c.preferred && 'reason' in c.preferred ? c.preferred.reason : '')))
+  const commonReason = !list.length && notValid.length > 1 && reasons.size === 1 ? [...reasons][0] : ''
 
   const register = (c: Candidate, returnDate?: string) => {
     if (!rec?.type) return
@@ -82,8 +108,29 @@ export function ChangeView({
         )}
         {rec?.type && (
           <label className="check">
-            <input type="checkbox" checked={onlyWithReturn} onChange={(e) => setOnlyWithReturn(e.target.checked)} /> Solo con devolución posible
+            <input type="checkbox" checked={onlyWithReturn} onChange={(e) => setUi({ ...ui, onlyWithReturn: e.target.checked })} /> Solo con devolución posible
           </label>
+        )}
+        {rec?.type && (
+          <label className="field">
+            <span>Propongo devolver el día (opcional)</span>
+            <span className="row">
+              <input
+                id="devolver"
+                type="date"
+                value={preferredReturn ?? ''}
+                min={dates[0]}
+                max={dates[dates.length - 1]}
+                onChange={(e) => setUi({ ...ui, preferredReturn: e.target.value || undefined })}
+              />
+              {preferredReturn && <button onClick={() => setUi({ ...ui, preferredReturn: undefined })}>Quitar</button>}
+            </span>
+          </label>
+        )}
+        {rec?.type && preferredReturn && (
+          <p className="me-line">
+            {fmtShort(preferredReturn)} · tú: <CodeChip code={me[preferredReturn]} legend={state.legend} /> {codeLabel(state.legend, me[preferredReturn])}
+          </p>
         )}
       </div>
 
@@ -91,10 +138,39 @@ export function ChangeView({
         <>
           <h2>
             {list.length} {list.length === 1 ? 'candidato' : 'candidatos'}
+            {preferredReturn && ` con devolución el ${fmtShort(preferredReturn)}`}
           </h2>
+          {commonReason && <p className="warn">Nadie vale para ese día: {commonReason}.</p>}
           {list.map((c, i) => (
-            <CandidateCard key={c.personId} rank={i + 1} c={c} state={state} type={rec.type!} onRegister={register} missingMine={missingMine} />
+            <CandidateCard
+              key={c.personId}
+              rank={i + 1}
+              c={c}
+              state={state}
+              type={rec.type!}
+              onRegister={register}
+              missingMine={missingMine}
+              open={ui.open.includes(c.personId)}
+              onToggle={() => toggleOpen(c.personId)}
+            />
           ))}
+          {preferredReturn && notValid.length > 0 && (
+            <>
+              <button className="link" onClick={() => setShowNotValid(!showNotValid)}>
+                {showNotValid ? 'Ocultar' : 'Ver'} los que no valen para el {fmtShort(preferredReturn)} ({notValid.length})
+              </button>
+              {showNotValid && (
+                <ul className="discarded">
+                  {notValid.map((c) => (
+                    <li key={c.personId}>
+                      <b>{shortName(state.persons[c.personId])}</b>: {c.preferred && 'reason' in c.preferred ? c.preferred.reason : ''}
+                      {c.returns.length > 0 && ` · otras devoluciones: ${c.returns.slice(0, 3).map((r) => fmtShort(r.date)).join(', ')}`}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
           <button className="link" onClick={() => setShowDiscarded(!showDiscarded)}>
             {showDiscarded ? 'Ocultar' : 'Ver'} descartados ({rec.discarded.length})
           </button>
@@ -140,6 +216,8 @@ function CandidateCard({
   type,
   onRegister,
   missingMine,
+  open,
+  onToggle,
 }: {
   rank: number
   c: Candidate
@@ -147,13 +225,15 @@ function CandidateCard({
   type: 'quitar' | 'trabajar'
   onRegister: (c: Candidate, returnDate?: string) => void
   missingMine: boolean
+  open: boolean
+  onToggle: () => void
 }) {
-  const [open, setOpen] = useState(false)
   const [all, setAll] = useState(false)
+  const pref = c.preferred && 'option' in c.preferred ? c.preferred.option : undefined
   const shown = all ? c.returns : c.returns.slice(0, 5)
   return (
     <div className="card cand">
-      <div className="cand-head" onClick={() => setOpen(!open)}>
+      <div className="cand-head" onClick={onToggle}>
         <span className="rank">{rank}</span>
         <div className="cand-main">
           <b>{state.persons[c.personId]?.name}</b>
@@ -166,6 +246,12 @@ function CandidateCard({
             {c.balance > 0 && ` · te debe ${c.balance}`}
             {c.balance < 0 && ` · le debes ${-c.balance}`}
           </small>
+          {pref && (
+            <small className="ok">
+              Devuelve el {fmtShort(pref.date)}
+              {pref.notes.length > 0 && ` · ${pref.notes.join(' · ')}`}
+            </small>
+          )}
         </div>
         <span className="chev">{open ? '▴' : '▾'}</span>
       </div>
@@ -179,6 +265,14 @@ function CandidateCard({
               <li key={r} className="warn">Aviso: {r}</li>
             ))}
           </ul>
+          {pref && (
+            <div className="ret">
+              <span>
+                <b>Tu fecha:</b> {fmtShort(pref.date)} <CodeChip code={type === 'quitar' ? pref.partnerCode : pref.myCode} legend={state.legend} small />
+              </span>
+              <button className="primary" onClick={() => onRegister(c, pref.date)}>Elegir</button>
+            </div>
+          )}
           {c.returns.length > 0 && (
             <>
               <p className="hint">
