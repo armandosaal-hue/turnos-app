@@ -4,7 +4,7 @@ import { codeLabel, visualKind } from '../domain/legend'
 import { addDays, defaultDate, fmtShort, MONTHS, weekday, WEEKDAY_SHORT } from '../domain/dates'
 import { registerCambio } from '../domain/state'
 import type { AppState, CambioType, Legend } from '../domain/types'
-import { Avatar, CodeChip, Empty, shortName } from './common'
+import { Avatar, CodeChip, Empty, excelRow, rowLabel, shortName } from './common'
 import { Icon } from './icons'
 
 // Lo que se elige en Cambiar. Vive en App para que no se pierda al cambiar de pestaña.
@@ -167,6 +167,9 @@ export function ChangeView({
             {list.length} {list.length === 1 ? 'candidato' : 'candidatos'}
             {preferredReturn && ` con devolución el ${fmtShort(preferredReturn)}`}
           </h2>
+          {list.length > 0 && !Object.values(state.persons).some((p) => p.rows) && (
+            <p className="hint">Para ver la fila del Excel de cada persona, vuelve a cargar el Excel en Más → Cargar plantilla.</p>
+          )}
           {commonReason && <p className="warn">Nadie vale para ese día: {commonReason}.</p>}
           {list.map((c, i) => (
             <CandidateCard
@@ -177,6 +180,7 @@ export function ChangeView({
               type={rec.type!}
               onRegister={(c, returnDate) => setPending({ c, returnDate })}
               missingMine={missingMine}
+              date={date}
               open={ui.open.includes(c.personId)}
               onToggle={() => toggleOpen(c.personId)}
             />
@@ -190,7 +194,9 @@ export function ChangeView({
                 <ul className="discarded">
                   {notValid.map((c) => (
                     <li key={c.personId}>
-                      <b>{shortName(state.persons[c.personId])}</b>: {c.preferred && 'reason' in c.preferred ? c.preferred.reason : ''}
+                      <b>{shortName(state.persons[c.personId])}</b>
+                      {excelRow(state.persons[c.personId], date) !== undefined && <small> (fila {excelRow(state.persons[c.personId], date)})</small>}:{' '}
+                      {c.preferred && 'reason' in c.preferred ? c.preferred.reason : ''}
                       {c.returns.length > 0 && ` · otras devoluciones: ${c.returns.slice(0, 3).map((r) => fmtShort(r.date)).join(', ')}`}
                     </li>
                   ))}
@@ -206,7 +212,8 @@ export function ChangeView({
               <ul className="discarded">
                 {rec.discarded.map((d) => (
                   <li key={d.personId}>
-                    <b>{shortName(state.persons[d.personId])}</b>: {d.reason}
+                    <b>{shortName(state.persons[d.personId])}</b>
+                    {excelRow(state.persons[d.personId], date) !== undefined && <small> (fila {excelRow(state.persons[d.personId], date)})</small>}: {d.reason}
                   </li>
                 ))}
               </ul>
@@ -294,6 +301,7 @@ function CandidateCard({
   type,
   onRegister,
   missingMine,
+  date,
   open,
   onToggle,
 }: {
@@ -303,6 +311,7 @@ function CandidateCard({
   type: CambioType
   onRegister: (c: Candidate, returnDate?: string) => void
   missingMine: boolean
+  date: string
   open: boolean
   onToggle: () => void
 }) {
@@ -321,8 +330,14 @@ function CandidateCard({
           <span className="rank">{rank}</span>
         </span>
         <div className="cand-main">
-          <b>{shortName(person)}</b>
-          <span className="full">{person?.name}</span>
+          <span className="cand-name">
+            <b>{shortName(person)}</b>
+            {excelRow(person, date) !== undefined && <span className="row-badge">Fila {excelRow(person, date)}</span>}
+          </span>
+          <span className="full">
+            {person?.name}
+            {person?.puesto ? ` · puesto ${person.puesto}` : ''}
+          </span>
           <div className="cand-tags">
             {c.returns.length ? (
               <span className="tag accent">{c.returns.length} devoluciones</span>
@@ -442,6 +457,7 @@ function ConfirmSheet({
           <Avatar p={partner} size={44} />
           <div>
             <b>{type === 'quitar' ? `${shortName(partner)} hace tu turno` : `Haces el turno de ${shortName(partner)}`}</b>
+            {rowLabel(partner, date) && <div className="hint">{partner?.name} · {rowLabel(partner, date)}</div>}
             <div className="hint">{returnDate ? `Devolución el ${fmtShort(returnDate)}` : 'Sin devolución: queda a deber'}</div>
           </div>
         </div>

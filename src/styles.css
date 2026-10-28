@@ -1522,3 +1522,18 @@ button.link {
   color: #ffffff;
   box-shadow: inset 0 0 0 1px #3a3a3a;
 }
+.cand-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.row-badge {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--text);
+  color: var(--card);
+  border-radius: 6px;
+  padding: 1px 7px;
+}

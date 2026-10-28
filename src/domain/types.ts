@@ -24,6 +24,7 @@ export interface Person {
   name: string
   note: string // texto entre paréntesis del Excel, p. ej. "RJ 85%"
   puesto: string
+  rows?: Record<string, number> // fila del Excel por mes ("2026-11" → 37)
   section: string
   candidate: boolean
 }

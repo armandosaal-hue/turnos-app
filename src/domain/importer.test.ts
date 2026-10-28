@@ -99,6 +99,9 @@ describe('varios meses en un archivo', () => {
       { month: '2026-10', persons: 3 },
       { month: '2026-11', persons: 2 },
     ])
+    // Fila del Excel (contando desde 1) de cada persona en cada mes.
+    expect(p.persons['A, ANA'].rows).toEqual({ '2026-10': 4, '2026-11': 13 })
+    expect(p.persons['M, LUZ'].rows).toEqual({ '2026-10': 9 })
   })
 
   it('un mes con nombre en una celda ("Noviembre 2026") y paso de diciembre a enero', () => {
@@ -114,6 +117,7 @@ describe('varios meses en un archivo', () => {
     const b = parsePlantilla([[null, '2026', ...nov[0].slice(2)], ...nov.slice(1)].map((r, i) => (i === 0 ? [null, null, ...nov[0].slice(2)] : r)).map((r, i) => (i === 1 ? [null, '2026', 1, 2, 3] : r)))
     const m = mergeParsed([a, b])
     expect(Object.keys(m.grid['A, ANA'])).toHaveLength(6)
+    expect(m.persons['MAYO GIL, EVA'].rows).toEqual({ '2026-10': 5, '2026-11': 5 })
     expect(m.to).toBe('2026-11-03')
   })
 })

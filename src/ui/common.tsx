@@ -95,3 +95,14 @@ export function Empty({ icon, children }: { icon: IconName; children: ReactNode 
     </div>
   )
 }
+
+// Fila del Excel de una persona en el mes de esa fecha (o la de otro mes si en ese no sale).
+export function excelRow(p: Person | undefined, date: string): number | undefined {
+  if (!p?.rows) return undefined
+  return p.rows[date.slice(0, 7)] ?? Object.values(p.rows)[0]
+}
+
+export function rowLabel(p: Person | undefined, date: string): string {
+  const r = excelRow(p, date)
+  return [r ? `fila ${r}` : '', p?.puesto ? `puesto ${p.puesto}` : ''].filter(Boolean).join(' · ')
+}
