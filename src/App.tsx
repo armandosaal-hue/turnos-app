@@ -119,7 +119,6 @@ export function App() {
                 setChangeUi({ ...changeUi, date, preferredReturn: undefined, open: [] })
                 setTab('cambiar')
               }}
-              goCambios={() => setTab('cambios')}
               goMyShifts={() => setTab('calendario')}
               goMore={goMore}
             />

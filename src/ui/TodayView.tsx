@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
-import { addDays, defaultDate, fmtShort, MONTHS, todayIso, weekday, WEEKDAY_SHORT } from '../domain/dates'
-import { allDates, balanceWith } from '../domain/engine'
+import { useMemo, useState } from 'react'
+import { addDays, daysInMonth, defaultDate, isoDate, MONTHS, todayIso, weekday, WEEKDAY_SHORT } from '../domain/dates'
+import { allDates } from '../domain/engine'
+import { coworkers, monthSummary } from '../domain/summary'
 import { visualKind, type VisualKind } from '../domain/legend'
 import type { AppState } from '../domain/types'
-import { CodeChip, Empty } from './common'
+import { Empty, shortName, ShiftPill } from './common'
 import { Icon, type IconName } from './icons'
 import type { MoreSection } from './MoreView'
 
@@ -22,18 +23,18 @@ const LOOK: Record<VisualKind, { icon: IconName; label: string }> = {
 export function TodayView({
   state,
   openDay,
-  goCambios,
   goMyShifts,
   goMore,
 }: {
   state: AppState
   openDay: (date: string) => void
-  goCambios: () => void
   goMyShifts: () => void
   goMore: (s: MoreSection) => void
 }) {
   const dates = useMemo(() => allDates(state.grid), [state.grid])
   const today = todayIso()
+  const [month, setMonth] = useState(today.slice(0, 7))
+  const [allCo, setAllCo] = useState(false)
   const meId = state.meId
   const me = (meId && state.grid[meId]) || {}
 
@@ -64,24 +65,22 @@ export function TodayView({
   const hours = entry?.start && entry?.end ? `${entry.start} – ${entry.end}` : kind === 'saliente' ? 'Descanso tras la noche' : ''
   const [, m, d] = today.split('-').map(Number)
 
-  const next = Array.from({ length: 14 }, (_, i) => addDays(today, i + 1))
   const nextShift = Array.from({ length: 60 }, (_, i) => addDays(today, i + 1)).find((x) => ['diurno', 'noche'].includes(vk(x)))
-  const month = today.slice(0, 7)
-  const monthShifts = Object.keys(me).filter((x) => x.startsWith(month) && ['diurno', 'noche'].includes(vk(x))).length
-  const loadedInMonth = dates.filter((x) => x.startsWith(month))
+  const thisMonth = today.slice(0, 7)
+  const monthShifts = Object.keys(me).filter((x) => x.startsWith(thisMonth) && ['diurno', 'noche'].includes(vk(x))).length
+  const loadedInMonth = dates.filter((x) => x.startsWith(thisMonth))
   const known = loadedInMonth.filter((x) => me[x] !== undefined).length
   const missing = loadedInMonth.length > 0 && known < loadedInMonth.length
 
-  const partners = [...new Set(state.cambios.map((c) => c.partnerId))]
-  let owed = 0
-  let owe = 0
-  for (const p of partners) {
-    const b = balanceWith(state.cambios, p)
-    if (b > 0) owed += b
-    else owe -= b
-  }
-  const pending = state.cambios.filter((c) => c.status === 'pendiente').length
   const canOpen = (x: string) => dates.includes(x)
+  const hoursOf = (x: string) => {
+    const e = state.legend[me[x]]
+    return e?.start && e?.end ? `${e.start}–${e.end}` : ''
+  }
+  const [yy, my] = month.split('-').map(Number)
+  const monthDays = Array.from({ length: daysInMonth(yy, my) }, (_, i) => isoDate(yy, my, i + 1))
+  const sum = monthSummary(state, meId, month)
+  const team = nextShift ? coworkers(state, meId, nextShift) : []
 
   return (
     <div className="view">
@@ -120,39 +119,114 @@ export function TodayView({
         </div>
       )}
 
-      <p className="section-title">Próximos días</p>
-      <div className="week">
-        {next.map((x) => (
-          <button key={x} className="wday" disabled={!canOpen(x)} onClick={() => openDay(x)} aria-label={`Cambiar el ${fmtShort(x)}`}>
-            <span className="wd-l">{WEEKDAY_SHORT[weekday(x)]}</span>
-            <span className="wd-n">{Number(x.slice(8))}</span>
-            <CodeChip code={me[x]} prev={me[addDays(x, -1)]} legend={state.legend} small />
-          </button>
-        ))}
-      </div>
-
       <div className="stats">
         <div className="stat">
           <span>Próximo turno</span>
           <b>{nextShift ? Number(nextShift.slice(8)) : '–'}</b>
-          <span>{nextShift ? `${WEEKDAY_SHORT[weekday(nextShift)]} · ${LOOK[vk(nextShift)].label.toLowerCase()}` : 'sin turnos cargados'}</span>
+          <span>
+            {nextShift
+              ? `${WEEKDAY_SHORT[weekday(nextShift)]} · ${LOOK[vk(nextShift)].label.toLowerCase()}${hoursOf(nextShift) ? ` · ${hoursOf(nextShift)}` : ''}`
+              : 'sin turnos cargados'}
+          </span>
         </div>
         <div className="stat">
           <span>Turnos de 12 h este mes</span>
           <b>{monthShifts}</b>
           <span>{MONTHS[m - 1].toLowerCase()}</span>
         </div>
-        <button className="stat" onClick={goCambios}>
-          <span>Saldo de cambios</span>
-          <b className={owed - owe > 0 ? 'ok' : owed - owe < 0 ? 'warn' : ''}>{owed - owe > 0 ? `+${owed - owe}` : owed - owe}</b>
-          <span>{owed || owe ? `te deben ${owed} · debes ${owe}` : 'nadie te debe ni debes'}</span>
-        </button>
-        <button className="stat" onClick={goCambios}>
-          <span>Cambios pendientes</span>
-          <b>{pending}</b>
-          <span>sin confirmar en la plantilla</span>
-        </button>
       </div>
+
+      <div className="card">
+        <div className="month-nav">
+          <button aria-label="Mes anterior" onClick={() => setMonth(shiftMonth(month, -1))}>
+            <Icon name="left" size={18} />
+          </button>
+          <b>
+            {MONTHS[my - 1].toLowerCase()} {yy}
+          </b>
+          <button aria-label="Mes siguiente" onClick={() => setMonth(shiftMonth(month, 1))}>
+            <Icon name="right" size={18} />
+          </button>
+        </div>
+        {sum.known === 0 ? (
+          <p className="hint">No tengo tus turnos de este mes.</p>
+        ) : (
+          <div className="summary-grid">
+            <div className="sg p-diurno-soft">
+              <b>{sum.diurnos}</b>
+              <span>diurnos</span>
+            </div>
+            <div className="sg p-noche-soft">
+              <b>{sum.noches}</b>
+              <span>noches</span>
+            </div>
+            <div className="sg">
+              <b>{sum.hours}</b>
+              <span>horas</span>
+            </div>
+            <div className="sg">
+              <b>{sum.libres}</b>
+              <span>libres</span>
+            </div>
+            <div className="sg">
+              <b>{sum.weekendDays}</b>
+              <span>sáb/dom</span>
+            </div>
+          </div>
+        )}
+        {sum.known > 0 && sum.known < sum.days && <p className="hint">Faltan {sum.days - sum.known} días tuyos de este mes en la app.</p>}
+        <div className="month mine">
+          {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((l) => (
+            <div key={l} className="mh">{l}</div>
+          ))}
+          {Array.from({ length: (weekday(monthDays[0]) + 6) % 7 }, (_, i) => (
+            <div key={`e${i}`} />
+          ))}
+          {monthDays.map((x) => (
+            <button
+              key={x}
+              className={`mday${x === today ? ' is-today' : ''}`}
+              disabled={!canOpen(x)}
+              onClick={() => openDay(x)}
+              aria-label={`Día ${Number(x.slice(8))}`}
+            >
+              <span>{Number(x.slice(8))}</span>
+              <ShiftPill code={me[x]} prev={me[addDays(x, -1)]} legend={state.legend} />
+            </button>
+          ))}
+        </div>
+        <p className="hint">Toca un día para pedir un cambio.</p>
+      </div>
+
+      {nextShift && (
+        <div className="card">
+          <h2>Quién trabaja contigo</h2>
+          <p className="hint">
+            {WEEKDAY_FULL[weekday(nextShift)]} {Number(nextShift.slice(8))} · {LOOK[vk(nextShift)].label.toLowerCase()} · {team.length}{' '}
+            {team.length === 1 ? 'compañero' : 'compañeros'} según la plantilla cargada (puede no estar actualizada).
+          </p>
+          <ul className="team">
+            {(allCo ? team : team.slice(0, 8)).map((p) => (
+              <li key={p.id}>
+                <span className="group-dot" style={{ background: p.group ?? 'var(--line)' }} />
+                {p.puesto && <span className="num-badge">{p.puesto}</span>}
+                <span>{shortName(p)}</span>
+              </li>
+            ))}
+          </ul>
+          {team.length > 8 && (
+            <button className="link" onClick={() => setAllCo(!allCo)}>
+              {allCo ? 'Ver menos' : `Ver todos (${team.length})`}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
+}
+
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1))
+  return d.toISOString().slice(0, 7)
 }
