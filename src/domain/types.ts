@@ -24,6 +24,7 @@ export interface Person {
   name: string
   note: string // texto entre paréntesis del Excel, p. ej. "RJ 85%"
   puesto: string
+  group?: string // color de la columna A en el Excel: personas con el mismo ciclo
   section: string
   candidate: boolean
 }

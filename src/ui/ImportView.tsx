@@ -8,6 +8,7 @@ import type { AppState, Kind, ShiftCode } from '../domain/types'
 import { CodeChip } from './common'
 import { Icon } from './icons'
 import { fileKind } from '../fileKind'
+import { readRowColors } from '../domain/xlsxColors'
 
 // La lectura de fotos (y el cliente de la API) solo se descarga cuando se usa.
 const ImageImport = lazy(() => import('./ImageImport').then((m) => ({ default: m.ImageImport })))
@@ -80,7 +81,10 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
     setBusy(true)
     try {
       if (kinds[i] === 'csv') next(parsePlantilla(parseCsv(await file.text())), file.name)
-      else next(parseWorkbook((await readXlsxFile(file)) as { sheet: string; data: Cell[][] }[]), file.name)
+      else {
+        const sheets = (await readXlsxFile(file)) as { sheet: string; data: Cell[][] }[]
+        next(parseWorkbook(sheets, readRowColors(new Uint8Array(await file.arrayBuffer()))), file.name)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

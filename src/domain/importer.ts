@@ -1,5 +1,6 @@
 import { daysInMonth, isoDate, MONTHS, weekday, WEEKDAY_LETTER } from './dates'
 import { BLANK, type Grid, type Person } from './types'
+import { isGroupColor } from './xlsxColors'
 
 export type Cell = string | number | boolean | Date | null | undefined
 
@@ -190,6 +191,7 @@ export function monthYearFromName(name: string): { month: number | null; year: n
 
 export interface ParseHints {
   sheetName?: string
+  colors?: Record<number, string> // color de la columna A por número de fila (desde 1)
   year?: number // año de la hoja anterior, si esta no lo trae
 }
 
@@ -337,6 +339,8 @@ export function parsePlantilla(rows: Cell[][], hints: ParseHints = {}): ParsedPl
     if (!existing) {
       // El personal de turno fijo (mañana y noches) no entra como candidato.
       persons[id] = { id, name, note, puesto: a, section, candidate: !fixedBlock }
+      const color = hints.colors?.[r + 1]
+      if (isGroupColor(color)) persons[id].group = color
     } else if (note && !existing.note.includes(note)) {
       existing.note = [existing.note, note].filter(Boolean).join(' · ')
     }
@@ -371,7 +375,10 @@ function headerLike(row: Cell[], cols: number[]): boolean {
 
 // Lee todas las pestañas con fila de días y las une. Si una no se puede leer, avisa de
 // cuál y por qué en lugar de descartarla en silencio.
-export function parseWorkbook(sheets: { sheet: string; data: Cell[][] }[]): ParsedPlantilla {
+export function parseWorkbook(
+  sheets: { sheet: string; data: Cell[][] }[],
+  colors: Record<string, Record<number, string>> = {},
+): ParsedPlantilla {
   const parts: ParsedPlantilla[] = []
   const failed: string[] = []
   let firstError: unknown
@@ -379,7 +386,7 @@ export function parseWorkbook(sheets: { sheet: string; data: Cell[][] }[]): Pars
   for (const s of sheets) {
     if (!hasDayHeader(s.data)) continue
     try {
-      const p = parsePlantilla(s.data, { sheetName: s.sheet, year })
+      const p = parsePlantilla(s.data, { sheetName: s.sheet, year, colors: colors[s.sheet] })
       parts.push(p)
       year = Number(p.to.slice(0, 4))
     } catch (e) {
@@ -408,7 +415,10 @@ export function mergeParsed(parts: ParsedPlantilla[]): ParsedPlantilla {
   let conflicts = 0
   parts.forEach((p, i) => {
     warnings.push(...p.warnings)
-    for (const [id, person] of Object.entries(p.persons)) persons[id] ??= person
+    for (const [id, person] of Object.entries(p.persons)) {
+      // El grupo de color es el de la última pestaña (la más reciente) que lo trae.
+      persons[id] = persons[id] ? { ...persons[id], group: person.group ?? persons[id].group } : person
+    }
     for (const [id, row] of Object.entries(p.grid)) {
       const target = (grid[id] ??= {})
       for (const [date, code] of Object.entries(row)) {

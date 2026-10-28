@@ -115,7 +115,7 @@ export function applyImport(
 
   for (const [pid, p] of Object.entries(parsed.persons)) {
     const old = state.persons[pid]
-    persons[pid] = old ? { ...old, note: p.note, puesto: p.puesto, section: p.section } : p
+    persons[pid] = old ? { ...old, note: p.note, puesto: p.puesto, group: p.group, section: p.section } : p
   }
   for (const [pid, row] of Object.entries(parsed.grid)) {
     const target: Record<string, string> = {}

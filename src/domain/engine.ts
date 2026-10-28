@@ -20,6 +20,7 @@ export interface Candidate {
   softIssues: string[]
   balance: number
   returns: ReturnOption[]
+  fit: number // encaje del día en su calendario (>0 encadena, <0 le parte libres)
   preferred?: { option: ReturnOption } | { reason: string } // solo si propongo fecha de devolución
 }
 
@@ -289,7 +290,7 @@ export function recommend(state: AppState, meId: string, date: string, opts: Rec
     }
 
     const preferred = opts.preferredReturn ? checkReturn(pair, opts.preferredReturn) : undefined
-    candidates.push({ personId: p.id, name: p.name, codeOnDate: pc, score, reasons, softIssues, balance, returns, preferred })
+    candidates.push({ personId: p.id, name: p.name, codeOnDate: pc, score, reasons, softIssues, balance, returns, fit: fit.score, preferred })
   }
 
   candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))

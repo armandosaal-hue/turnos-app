@@ -340,3 +340,29 @@ describe('tipo visual de los turnos', () => {
     expect(visualKind(l, undefined)).toBe('none')
   })
 })
+
+describe('grupos de color', () => {
+  it('pone primero el grupo al que el turno le encadena con su ciclo y detecta grupos sin ciclo común', async () => {
+    const { groupCandidates, sharesCycle } = await import('./groups')
+    // Me quito el diurno del día 4.
+    const s = state({
+      //     1 2 3 4 5 6 7 8
+      YO: '  L L L _ L L L L',
+      A1: '  _ _ _ L L L L L', // grupo amarillo: diurnos 1-3, el 4 les encadena
+      A2: '  _ _ _ L L L _ L',
+      V1: '  L L L L L _ _ _', // grupo verde: diurnos 6-8, el 4 les cae entre libres
+      V2: '  L L L L L _ _ _',
+      S1: '  _ L L L N D L L', // rosa: sin ciclo común
+      S2: '  L L L L L L L _',
+    })
+    for (const [id, g] of Object.entries({ A1: '#FEFC78', A2: '#FEFC78', V1: '#72FA78', V2: '#72FA78', S1: '#FED9EC', S2: '#FED9EC' })) s.persons[id].group = g
+    expect(sharesCycle(s, ['A1', 'A2'])).toBe(true)
+    expect(sharesCycle(s, ['S1', 'S2'])).toBe(false)
+    const groups = groupCandidates(s, recommend(s, 'YO', day(4)).candidates)
+    expect(groups.map((g) => [g.name, g.tier])).toEqual([
+      ['Grupo amarillo', 'encadena'],
+      ['Grupo rosa claro', 'sin-ciclo'],
+      ['Grupo verde', 'resto'],
+    ])
+  })
+})

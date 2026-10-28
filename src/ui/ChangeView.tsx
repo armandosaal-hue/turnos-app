@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { allDates, recommend, type Candidate, type ReturnOption } from '../domain/engine'
 import { codeLabel, visualKind } from '../domain/legend'
 import { addDays, defaultDate, fmtShort, MONTHS, weekday, WEEKDAY_SHORT } from '../domain/dates'
+import { groupCandidates, type GroupInfo } from '../domain/groups'
 import { registerCambio } from '../domain/state'
 import type { AppState, CambioType, Legend, Person } from '../domain/types'
 import { Avatar, CodeChip, Empty, shortName } from './common'
@@ -12,6 +13,7 @@ export interface ChangeUi {
   date?: string
   preferredReturn?: string
   onlyWithReturn: boolean
+  byGroup?: boolean // por grupos de color (por defecto sí)
   open: string[] // candidatos desplegados
 }
 
@@ -77,6 +79,10 @@ export function ChangeView({
   const fits = (c: Candidate) => !!c.preferred && 'option' in c.preferred
   const list = preferredReturn ? all.filter(fits) : all
   const notValid = preferredReturn ? all.filter((c) => !fits(c)) : []
+  const hasGroups = list.some((c) => state.persons[c.personId]?.group)
+  const groups = hasGroups && ui.byGroup !== false ? groupCandidates(state, list) : null
+  const ordered = groups ? groups.flatMap((g) => g.candidates) : list
+  const rankOf = new Map(ordered.map((c, i) => [c.personId, i + 1]))
   const reasons = new Set(notValid.map((c) => (c.preferred && 'reason' in c.preferred ? c.preferred.reason : '')))
   const commonReason = !list.length && notValid.length > 1 && reasons.size === 1 ? [...reasons][0] : ''
   const vk = visualKind(state.legend, myCode, me[addDays(date, -1)])
@@ -121,6 +127,11 @@ export function ChangeView({
             <button className={`pill${onlyWithReturn ? ' on' : ''}`} aria-pressed={onlyWithReturn} onClick={() => setUi({ ...ui, onlyWithReturn: !onlyWithReturn })}>
               {onlyWithReturn && <Icon name="check" size={16} />} Con devolución
             </button>
+            {all.some((c) => state.persons[c.personId]?.group) && (
+              <button className={`pill${ui.byGroup !== false ? ' on' : ''}`} aria-pressed={ui.byGroup !== false} onClick={() => setUi({ ...ui, byGroup: ui.byGroup === false })}>
+                {ui.byGroup !== false && <Icon name="check" size={16} />} Por grupos
+              </button>
+            )}
             {preferredReturn ? (
               <button className="pill on" onClick={() => setUi({ ...ui, preferredReturn: undefined })} aria-label="Quitar fecha de devolución">
                 Devolver el {fmtShort(preferredReturn)} ✕
@@ -168,10 +179,30 @@ export function ChangeView({
             {preferredReturn && ` con devolución el ${fmtShort(preferredReturn)}`}
           </h2>
           {commonReason && <p className="warn">Nadie vale para ese día: {commonReason}.</p>}
-          {list.map((c, i) => (
+          {groups && <p className="hint">Por grupo de color de la plantilla: primero los grupos a los que el turno se les junta con su ciclo de turnos.</p>}
+          {list.length > 0 && !Object.values(state.persons).some((p) => p.group) && (
+            <p className="hint">Para verlos por grupos de color, vuelve a cargar el Excel en Más → Cargar plantilla.</p>
+          )}
+          {(groups ?? [{ key: 'all', candidates: list } as Pick<GroupInfo, 'key' | 'candidates'> & Partial<GroupInfo>]).map((g) => (
+            <section key={g.key}>
+              {groups && (
+                <div className="group-head">
+                  <span className="group-dot" style={{ background: g.color ?? 'var(--line)' }} />
+                  <div>
+                    <b>
+                      {g.name}
+                      {g.range && <small> · {g.range}</small>}
+                    </b>
+                    <div className="hint">
+                      {g.candidates.length} {g.candidates.length === 1 ? 'candidato' : 'candidatos'} · {g.note}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {g.candidates.map((c) => (
             <CandidateCard
               key={c.personId}
-              rank={i + 1}
+              rank={rankOf.get(c.personId)!}
               c={c}
               state={state}
               type={rec.type!}
@@ -180,6 +211,8 @@ export function ChangeView({
               open={ui.open.includes(c.personId)}
               onToggle={() => toggleOpen(c.personId)}
             />
+              ))}
+            </section>
           ))}
           {preferredReturn && notValid.length > 0 && (
             <div className="card">

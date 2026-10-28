@@ -75,7 +75,9 @@ export function CalendarView({ state, setState }: { state: AppState; setState: (
                   .sort((a, b) => (a.id === meId ? -1 : b.id === meId ? 1 : a.name.localeCompare(b.name)))
                   .map((p) => (
                     <tr key={p.id} className={p.id === meId ? 'me' : ''}>
-                      <th className="sticky">{p.name}</th>
+                      <th className={`sticky${p.group ? ' g' : ''}`} style={p.group ? ({ '--g': p.group } as React.CSSProperties) : undefined}>
+                        {p.name}
+                      </th>
                       {monthDates.map((d) => (
                         <td
                           key={d}
