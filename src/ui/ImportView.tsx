@@ -6,18 +6,17 @@ import { fmtShort, MONTHS } from '../domain/dates'
 import { analyzeImport, applyImport, unknownCodes, type ImportAnalysis } from '../domain/state'
 import type { AppState, Kind, ShiftCode } from '../domain/types'
 import { CodeChip } from './common'
+import { Icon } from './icons'
 import { fileKind } from '../fileKind'
 
 // La lectura de fotos (y el cliente de la API) solo se descarga cuando se usa.
 const ImageImport = lazy(() => import('./ImageImport').then((m) => ({ default: m.ImageImport })))
-const MyShotImport = lazy(() => import('./MyShotImport').then((m) => ({ default: m.MyShotImport })))
 const ChatImport = lazy(() => import('./ChatImport').then((m) => ({ default: m.ChatImport })))
 
 type Step =
   | { s: 'idle' }
   | { s: 'images'; files: File[] }
   | { s: 'chat' }
-  | { s: 'myshot' }
   | { s: 'codes'; parsed: ParsedPlantilla; fileName: string; defs: Record<string, ShiftCode> }
   | { s: 'review'; parsed: ParsedPlantilla; fileName: string; analysis: ImportAnalysis }
 
@@ -98,16 +97,6 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
     )
   }
 
-  if (step.s === 'myshot') {
-    return (
-      <Suspense fallback={<div className="empty">Cargando…</div>}>
-        <div className="view">
-          <MyShotImport state={state} setState={setState} onClose={() => setStep({ s: 'idle' })} />
-        </div>
-      </Suspense>
-    )
-  }
-
   if (step.s === 'chat') {
     return (
       <Suspense fallback={<div className="empty">Cargando…</div>}>
@@ -127,6 +116,11 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
     }
     return (
       <div className="view">
+        <div className="stepper">
+          <span className="on">1 · Elegir</span>
+          <span className="on">2 · Revisar</span>
+          <span>3 · Guardar</span>
+        </div>
         <h2>Códigos nuevos</h2>
         <p className="hint">
           La plantilla tiene códigos que no están en la leyenda. Por defecto cuentan como <b>no disponible</b>. Revisa cada uno.
@@ -171,6 +165,11 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
     const nameOf = (pid: string) => state.persons[pid]?.name ?? pid
     return (
       <div className="view">
+        <div className="stepper">
+          <span className="on">1 · Elegir</span>
+          <span className="on">2 · Revisar</span>
+          <span className="on">3 · Guardar</span>
+        </div>
         <h2>Revisión</h2>
         <div className="card">
           <p>
@@ -242,55 +241,67 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
 
   return (
     <div className="view">
-      <div className="card">
-        <h2>Solo mis turnos</h2>
-        <p className="hint">Captura de pantalla de tu app de turnos: actualiza tu fila y deja sin tocar la de los compañeros.</p>
-        <button className="primary" onClick={() => setStep({ s: 'myshot' })}>
-          Subir captura de mi app
+      <div className="stepper">
+        <span className="on">1 · Elegir</span>
+        <span>2 · Revisar</span>
+        <span>3 · Guardar</span>
+      </div>
+      <div className="col">
+        <label className="source card highlight">
+          <span className="source-ico">
+            <Icon name="sheet" />
+          </span>
+          <span className="source-text">
+            <b>Excel o fotos desde Archivos</b>
+            <small>.xlsx, .csv o imágenes guardadas (también las de WhatsApp)</small>
+          </span>
+          <input
+            id="plantilla"
+            type="file"
+            multiple
+            disabled={busy}
+            onChange={(e) => {
+              if (e.target.files?.length) onFiles(e.target.files)
+              e.target.value = ''
+            }}
+          />
+        </label>
+        <label className="source card">
+          <span className="source-ico">
+            <Icon name="image" />
+          </span>
+          <span className="source-text">
+            <b>Fotos de la galería</b>
+            <small>Puedes elegir varias a la vez</small>
+          </span>
+          <input
+            id="galeria"
+            type="file"
+            accept="image/*"
+            multiple
+            disabled={busy}
+            onChange={(e) => {
+              if (e.target.files?.length) onFiles(e.target.files)
+              e.target.value = ''
+            }}
+          />
+        </label>
+        <button className="source card" onClick={() => setStep({ s: 'chat' })}>
+          <span className="source-ico">
+            <Icon name="chat" />
+          </span>
+          <span className="source-text">
+            <b>Leer fotos con mi chat de Claude</b>
+            <small>Sin clave de API: copias unas instrucciones y pegas la respuesta</small>
+          </span>
         </button>
       </div>
-      <div className="card">
-        <h2>Cargar plantilla</h2>
-        <p className="hint">
-          Fotos de la plantilla (puedes elegir varias a la vez, también las de WhatsApp), Excel (.xlsx) o CSV. Si el periodo ya está cargado, verás solo las
-          diferencias.
-        </p>
-        <div className="col">
-          <label className="file">
-            <input
-              id="galeria"
-              type="file"
-              accept="image/*"
-              multiple
-              disabled={busy}
-              onChange={(e) => {
-                if (e.target.files?.length) onFiles(e.target.files)
-                e.target.value = ''
-              }}
-            />
-            Fotos de la galería
-          </label>
-          <label className="file">
-            <input
-              id="plantilla"
-              type="file"
-              multiple
-              disabled={busy}
-              onChange={(e) => {
-                if (e.target.files?.length) onFiles(e.target.files)
-                e.target.value = ''
-              }}
-            />
-            Fotos o Excel desde Archivos
-          </label>
-        </div>
-        {busy && <p className="hint">Abriendo…</p>}
-        <button className="secondary" onClick={() => setStep({ s: 'chat' })}>
-          Leer fotos con mi chat de Claude (sin clave de API)
-        </button>
-        <p className="hint">
-          Si la galería se queda en negro o no responde, usa <b>Desde Archivos</b>: las fotos de WhatsApp están en Imágenes o en la carpeta WhatsApp Images.
-        </p>
+      {busy && <p className="hint">Abriendo…</p>}
+      <p className="hint">
+        Cada archivo sustituye a lo anterior; antes de guardar verás qué cambia. Si la galería se queda en negro, usa <b>Archivos</b>: las fotos de WhatsApp
+        están en Imágenes o en la carpeta WhatsApp Images.
+      </p>
+      <div>
         {error && <p className="warn">{error}</p>}
       </div>
       <h2>Versiones cargadas</h2>

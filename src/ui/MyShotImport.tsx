@@ -73,7 +73,7 @@ export function MyShotImport({ state, setState, onClose }: { state: AppState; se
     return (
       <div className="card">
         <p className="ok">{done}</p>
-        <button className="primary" onClick={onClose}>Ver mis turnos</button>
+        <button className="primary" onClick={onClose}>Hecho</button>
       </div>
     )
   }

@@ -6,28 +6,12 @@ import { clearState, downloadJson } from '../store'
 import { CodeChip, normalize, PersonPicker } from './common'
 import { CodeKindFields } from './ImportView'
 
-type Tab = 'yo' | 'reglas' | 'leyenda' | 'companeros' | 'imagenes' | 'datos'
+export type SettingsSection = 'yo' | 'reglas' | 'leyenda' | 'companeros' | 'imagenes' | 'datos'
 
-export function SettingsView({ state, setState }: { state: AppState; setState: (s: AppState) => void }) {
-  const [tab, setTab] = useState<Tab>(state.meId ? 'reglas' : 'yo')
+export function SettingsView({ state, setState, section }: { state: AppState; setState: (s: AppState) => void; section: SettingsSection }) {
+  const tab = section
   return (
     <div className="view">
-      <div className="seg wrap">
-        {(
-          [
-            ['yo', 'Yo'],
-            ['reglas', 'Reglas'],
-            ['leyenda', 'Leyenda'],
-            ['companeros', 'Compañeros'],
-            ['imagenes', 'Imágenes'],
-            ['datos', 'Datos'],
-          ] as [Tab, string][]
-        ).map(([k, l]) => (
-          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
-            {l}
-          </button>
-        ))}
-      </div>
       {tab === 'yo' && <MeTab state={state} setState={setState} />}
       {tab === 'reglas' && <RulesTab rules={state.rules} setRules={(rules) => setState({ ...state, rules })} legend={state.legend} />}
       {tab === 'leyenda' && <LegendTab state={state} setState={setState} />}
@@ -81,13 +65,13 @@ function RulesTab({ rules, setRules, legend }: { rules: Rules; setRules: (r: Rul
   return (
     <>
       <div className="card">
-        <label className="check">
-          <input
+        <label className="check rule-head">
+          <b>Descanso tras noche intocable</b>
+          <span className="switch"><input
             type="checkbox"
             checked={rules.restAfterNight.enabled}
             onChange={(e) => setRules({ ...rules, restAfterNight: { ...rules.restAfterNight, enabled: e.target.checked } })}
-          />
-          <b>Descanso tras noche intocable</b>
+          /></span>
         </label>
         <p className="hint">
           Nadie puede trabajar el {rules.restAfterNight.restCode} que va justo después de una {rules.restAfterNight.nightCode}. Los siguientes sí.
@@ -95,13 +79,13 @@ function RulesTab({ rules, setRules, legend }: { rules: Rules; setRules: (r: Rul
       </div>
 
       <div className="card">
-        <label className="check">
-          <input
+        <label className="check rule-head">
+          <b>Horas seguidas prohibidas</b>
+          <span className="switch"><input
             type="checkbox"
             checked={rules.maxContinuousHours.enabled}
             onChange={(e) => setRules({ ...rules, maxContinuousHours: { ...rules.maxContinuousHours, enabled: e.target.checked } })}
-          />
-          <b>Horas seguidas prohibidas</b>
+          /></span>
         </label>
         <div className="row">
           <label className="field">
@@ -119,13 +103,13 @@ function RulesTab({ rules, setRules, legend }: { rules: Rules; setRules: (r: Rul
       </div>
 
       <div className="card">
-        <label className="check">
-          <input
+        <label className="check rule-head">
+          <b>Secuencias prohibidas (día → día siguiente)</b>
+          <span className="switch"><input
             type="checkbox"
             checked={rules.forbiddenSequences.enabled}
             onChange={(e) => setRules({ ...rules, forbiddenSequences: { ...rules.forbiddenSequences, enabled: e.target.checked } })}
-          />
-          <b>Secuencias prohibidas (día → día siguiente)</b>
+          /></span>
         </label>
         <HardSoft hard={rules.forbiddenSequences.hard} onChange={(h) => setRules({ ...rules, forbiddenSequences: { ...rules.forbiddenSequences, hard: h } })} />
         {rules.forbiddenSequences.items.map((it, i) => (
@@ -172,10 +156,10 @@ function RulesTab({ rules, setRules, legend }: { rules: Rules; setRules: (r: Rul
         ] as const
       ).map(([k, label]) => (
         <div key={k} className="card">
-          <label className="check">
-            <input type="checkbox" checked={rules[k].enabled} onChange={(e) => setRules({ ...rules, [k]: { ...rules[k], enabled: e.target.checked } })} />
+          <label className="check rule-head">
             <b>{label}</b>
-          </label>
+            <span className="switch"><input type="checkbox" checked={rules[k].enabled} onChange={(e) => setRules({ ...rules, [k]: { ...rules[k], enabled: e.target.checked } })} /></span>
+        </label>
           <div className="row">
             <input
               type="number"
@@ -188,13 +172,13 @@ function RulesTab({ rules, setRules, legend }: { rules: Rules; setRules: (r: Rul
         </div>
       ))}
       <div className="card">
-        <label className="check">
-          <input
+        <label className="check rule-head">
+          <b>Priorizar encadenar turnos y no partir libres</b>
+          <span className="switch"><input
             type="checkbox"
             checked={rules.preferChains?.enabled !== false}
             onChange={(e) => setRules({ ...rules, preferChains: { enabled: e.target.checked } })}
-          />
-          <b>Priorizar encadenar turnos y no partir libres</b>
+          /></span>
         </label>
         <p className="hint">
           Ordena primero a quien el turno le queda pegado a otros turnos y deja al final a quien le partiría sus días libres. Solo cambia el orden: no descarta a

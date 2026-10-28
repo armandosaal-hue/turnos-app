@@ -3,7 +3,7 @@ import { balanceWith } from '../domain/engine'
 import { fmtShort } from '../domain/dates'
 import { deleteCambio } from '../domain/state'
 import type { AppState } from '../domain/types'
-import { CodeChip } from './common'
+import { Avatar, CodeChip, Empty, shortName } from './common'
 
 export function CambiosView({ state, setState }: { state: AppState; setState: (s: AppState) => void }) {
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
@@ -12,22 +12,38 @@ export function CambiosView({ state, setState }: { state: AppState; setState: (s
 
   return (
     <div className="view">
-      <h2>Saldo</h2>
+      <p className="section-title">Saldo</p>
       {balances.length === 0 && <p className="hint">Sin días pendientes con nadie.</p>}
       {balances.map(({ p, b }) => (
-        <div key={p} className="card row between">
-          <span>{state.persons[p]?.name}</span>
-          <b className={b > 0 ? 'ok' : 'warn'}>{b > 0 ? `te debe ${b}` : `le debes ${-b}`}</b>
+        <div key={p} className="card balance">
+          <Avatar p={state.persons[p]} />
+          <span>{shortName(state.persons[p])}</span>
+          <span className={`num-big ${b > 0 ? 'ok' : 'warn'}`}>
+            <b>{Math.abs(b)}</b>
+            {b > 0 ? 'te debe' : 'le debes'}
+          </span>
         </div>
       ))}
 
-      <h2>Cambios registrados</h2>
-      {state.cambios.length === 0 && <p className="hint">Todavía no has registrado ninguno.</p>}
+      <p className="section-title">Cambios registrados</p>
+      {state.cambios.length === 0 && (
+        <Empty icon="swap">
+          <p>Todavía no has registrado ninguno. Los cambios que elijas en Cambiar aparecerán aquí.</p>
+        </Empty>
+      )}
       {state.cambios.map((c) => (
         <div key={c.id} className="card">
-          <p>
-            <b>{c.type === 'quitar' ? 'Me quito' : 'Me pongo'}</b> el {fmtShort(c.date)} con <b>{state.persons[c.partnerId]?.name}</b>
-            {c.returnDate ? ` · devolución el ${fmtShort(c.returnDate)}` : ' · sin devolución'}
+          <div className="summary">
+            <Avatar p={state.persons[c.partnerId]} />
+            <div>
+              <b>
+                {c.type === 'quitar' ? 'Me quito' : 'Me pongo'} el {fmtShort(c.date)}
+              </b>
+              <div className="hint">con {state.persons[c.partnerId]?.name}</div>
+            </div>
+          </div>
+          <p className="hint">
+            {c.returnDate ? `Devolución el ${fmtShort(c.returnDate)}` : 'Sin devolución'}
           </p>
           <p className="cells">
             {c.cells.map((cell) => (

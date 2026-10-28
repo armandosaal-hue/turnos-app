@@ -3,19 +3,22 @@ import type { AppState } from './domain/types'
 import { loadState, saveState } from './store'
 import { ChangeView, emptyChangeUi, type ChangeUi } from './ui/ChangeView'
 import { CalendarView } from './ui/CalendarView'
-import { ImportView } from './ui/ImportView'
 import { CambiosView } from './ui/CambiosView'
-import { SettingsView } from './ui/SettingsView'
+import { MoreView, type MoreSection } from './ui/MoreView'
+import { TodayView } from './ui/TodayView'
+import { shortName } from './ui/common'
+import { Icon, type IconName } from './ui/icons'
+import { MONTHS, todayIso } from './domain/dates'
 import { ErrorBoundary, isStaleChunk, reloadOnce } from './ui/ErrorBoundary'
 
-type Tab = 'cambiar' | 'calendario' | 'cargar' | 'cambios' | 'ajustes'
+type Tab = 'hoy' | 'cambiar' | 'calendario' | 'cambios' | 'mas'
 
-const TABS: [Tab, string, string][] = [
-  ['cambiar', 'Cambiar', '⇄'],
-  ['calendario', 'Calendario', '▦'],
-  ['cargar', 'Cargar', '⇪'],
-  ['cambios', 'Cambios', '☰'],
-  ['ajustes', 'Ajustes', '⚙'],
+const TABS: [Tab, string, IconName][] = [
+  ['hoy', 'Hoy', 'home'],
+  ['cambiar', 'Cambiar', 'swap'],
+  ['calendario', 'Calendario', 'calendar'],
+  ['cambios', 'Cambios', 'list'],
+  ['mas', 'Más', 'more'],
 ]
 
 const CHANGE_UI_KEY = 'turnos-cambiar'
@@ -32,7 +35,8 @@ function loadChangeUi(): ChangeUi {
 
 export function App() {
   const [state, setStateRaw] = useState<AppState | null>(null)
-  const [tab, setTab] = useState<Tab>('cambiar')
+  const [tab, setTab] = useState<Tab>('hoy')
+  const [more, setMore] = useState<MoreSection | null>(null)
   const [saveError, setSaveError] = useState(false)
   const timer = useRef<number>()
 
@@ -66,7 +70,10 @@ export function App() {
   useEffect(() => {
     loadState().then((s) => {
       setStateRaw(s)
-      if (!Object.keys(s.grid).length) setTab('cargar')
+      if (!Object.keys(s.grid).length) {
+        setTab('mas')
+        setMore('cargar')
+      }
     })
   }, [])
 
@@ -78,11 +85,24 @@ export function App() {
 
   if (!state) return <div className="empty">Cargando…</div>
 
+  const goMore = (section: MoreSection) => {
+    setTab('mas')
+    setMore(section)
+  }
+  const [ty, tm] = todayIso().split('-').map(Number)
+
   return (
     <div className="app">
       <header>
-        <h1>Turnos</h1>
-        {state.meId && <span className="who">{state.persons[state.meId]?.name}</span>}
+        <span className="head-logo">
+          <Icon name="calendar" size={22} />
+        </span>
+        <div className="head-text">
+          <h1>Turnos UCI</h1>
+          <span className="who">
+            {state.meId && state.persons[state.meId] ? shortName(state.persons[state.meId]) : 'Sin identificar'} · {MONTHS[tm - 1].toLowerCase()} {ty}
+          </span>
+        </div>
       </header>
       {saveError && <p className="warn banner">No se pueden guardar los datos en este navegador: se perderán al cerrar.</p>}
       {globalError && (
@@ -91,18 +111,48 @@ export function App() {
         </p>
       )}
       <main>
-        <ErrorBoundary key={tab}>
-        {tab === 'cambiar' && <ChangeView state={state} setState={setState} goSettings={() => setTab('ajustes')} goMyShifts={() => setTab('calendario')} ui={changeUi} setUi={setChangeUi} />}
-        {tab === 'calendario' && <CalendarView state={state} setState={setState} />}
-        {tab === 'cargar' && <ImportView state={state} setState={setState} />}
-        {tab === 'cambios' && <CambiosView state={state} setState={setState} />}
-        {tab === 'ajustes' && <SettingsView state={state} setState={setState} />}
+        <ErrorBoundary key={`${tab}-${more}`}>
+          {tab === 'hoy' && (
+            <TodayView
+              state={state}
+              openDay={(date) => {
+                setChangeUi({ ...changeUi, date, preferredReturn: undefined, open: [] })
+                setTab('cambiar')
+              }}
+              goCambios={() => setTab('cambios')}
+              goMyShifts={() => setTab('calendario')}
+              goMore={goMore}
+            />
+          )}
+          {tab === 'cambiar' && (
+            <ChangeView
+              state={state}
+              setState={setState}
+              goSettings={() => goMore('yo')}
+              goMyShifts={() => setTab('calendario')}
+              goLoad={() => goMore('cargar')}
+              ui={changeUi}
+              setUi={setChangeUi}
+            />
+          )}
+          {tab === 'calendario' && <CalendarView state={state} setState={setState} />}
+          {tab === 'cambios' && <CambiosView state={state} setState={setState} />}
+          {tab === 'mas' && <MoreView state={state} setState={setState} section={more} setSection={setMore} />}
         </ErrorBoundary>
       </main>
       <nav>
         {TABS.map(([k, label, icon]) => (
-          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
-            <span className="ico">{icon}</span>
+          <button
+            key={k}
+            className={tab === k ? 'on' : ''}
+            onClick={() => {
+              if (k === 'mas' && tab === 'mas') setMore(null)
+              setTab(k)
+            }}
+          >
+            <span className="ico">
+              <Icon name={icon} />
+            </span>
             {label}
           </button>
         ))}

@@ -139,7 +139,7 @@ export function codeLabel(legend: Legend, code: string | undefined): string {
 }
 
 export function displayCode(code: string): string {
-  return code === BLANK ? '·' : code
+  return code === BLANK ? '☼' : code
 }
 
 // Sugerencia para un código desconocido: la misma clave sin distinguir mayúsculas.

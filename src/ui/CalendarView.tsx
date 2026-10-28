@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { allDates } from '../domain/engine'
-import { codeLabel, displayCode } from '../domain/legend'
-import { defaultDate, fmtShort, MONTHS, todayIso, weekday, WEEKDAY_LETTER } from '../domain/dates'
+import { codeLabel, displayCode, visualKind } from '../domain/legend'
+import { addDays, defaultDate, fmtShort, MONTHS, todayIso, weekday, WEEKDAY_LETTER } from '../domain/dates'
 import { editCell } from '../domain/state'
 import type { AppState } from '../domain/types'
-import { normalize } from './common'
+import { Empty, normalize } from './common'
 import { MyShifts } from './MyShifts'
+import { Icon } from './icons'
 
 export function CalendarView({ state, setState }: { state: AppState; setState: (s: AppState) => void }) {
   const dates = useMemo(() => allDates(state.grid), [state.grid])
@@ -29,20 +30,31 @@ export function CalendarView({ state, setState }: { state: AppState; setState: (
         <button className={mode === 'unidad' ? 'on' : ''} onClick={() => setMode('unidad')}>Unidad</button>
       </div>
       {mode === 'yo' && <MyShifts state={state} setState={setState} />}
-      {mode === 'unidad' && !dates.length && <div className="empty">Primero carga una plantilla en la pestaña <b>Cargar</b>.</div>}
+      {mode === 'unidad' && !dates.length && (
+        <Empty icon="upload">
+          <p>Primero carga una plantilla en Más → Cargar plantilla.</p>
+        </Empty>
+      )}
       {mode === 'unidad' && dates.length > 0 && (
-        <div className="card row between">
-          <button disabled={idx <= 0} onClick={() => setMonth(months[idx - 1])}>‹</button>
+        <div className="card month-nav">
+          <button aria-label="Mes anterior" disabled={idx <= 0} onClick={() => setMonth(months[idx - 1])}>
+            <Icon name="left" size={18} />
+          </button>
           <b>
             {MONTHS[m - 1]?.toLowerCase()} {y}
           </b>
-          <button disabled={idx >= months.length - 1} onClick={() => setMonth(months[idx + 1])}>›</button>
+          <button aria-label="Mes siguiente" disabled={idx >= months.length - 1} onClick={() => setMonth(months[idx + 1])}>
+            <Icon name="right" size={18} />
+          </button>
         </div>
       )}
 
       {mode === 'unidad' && dates.length > 0 && (
         <>
-          <input className="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar por nombre…" />
+          <div className="search-box">
+            <Icon name="search" size={18} />
+            <input className="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar por nombre…" />
+          </div>
           <div className="table-wrap">
             <table className="unit">
               <thead>
@@ -67,7 +79,7 @@ export function CalendarView({ state, setState }: { state: AppState; setState: (
                       {monthDates.map((d) => (
                         <td
                           key={d}
-                          className={`k-${state.grid[p.id]?.[d] === undefined ? 'none' : state.legend[state.grid[p.id][d]]?.kind ?? 'ausencia'} o-${origin(p.id, d) ?? 'oficial'}`}
+                          className={`v-${visualKind(state.legend, state.grid[p.id]?.[d], state.grid[p.id]?.[addDays(d, -1)])} o-${origin(p.id, d) ?? 'oficial'}`}
                           onClick={() => state.grid[p.id]?.[d] !== undefined && setEdit({ personId: p.id, date: d })}
                         >
                           {state.grid[p.id]?.[d] === undefined ? '' : displayCode(state.grid[p.id][d])}
@@ -80,11 +92,15 @@ export function CalendarView({ state, setState }: { state: AppState; setState: (
           </div>
         </>
       )}
-      <p className="hint legend-line">
-        <span className="chip k-trabajo sm">·</span> diurno 12 h · <span className="chip k-trabajo sm">N</span> noche ·{' '}
-        <span className="chip k-libre sm">L</span> libre · <span className="chip k-ocupado sm">M</span> trabaja 7 h ·{' '}
-        <span className="chip k-ausencia sm">B</span> no disponible · borde discontinuo: cambio o edición tuya
-      </p>
+      <div className="hint legend-line">
+        <span><span className="chip v-diurno sm">☼</span>diurno</span>
+        <span><span className="chip v-noche sm">N</span>noche</span>
+        <span><span className="chip v-saliente sm">D</span>saliente</span>
+        <span><span className="chip v-libre sm">L</span>libre</span>
+        <span><span className="chip v-ocupado sm">M</span>7 h</span>
+        <span><span className="chip v-ausencia sm">B</span>no disponible</span>
+        <span>borde discontinuo: cambio o edición tuya</span>
+      </div>
 
       {edit && (
         <div className="sheet" onClick={() => setEdit(null)}>

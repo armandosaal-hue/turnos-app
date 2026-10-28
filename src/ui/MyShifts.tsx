@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { daysInMonth, fmtShort, isoDate, MONTHS, todayIso, weekday } from '../domain/dates'
+import { addDays, daysInMonth, fmtShort, isoDate, MONTHS, todayIso, weekday } from '../domain/dates'
 import { codeLabel } from '../domain/legend'
 import { violations } from '../domain/rules'
 import { clearManual, editCells, ensureMe } from '../domain/state'
 import type { AppState } from '../domain/types'
 import { CodeChip, PersonPicker } from './common'
 import { MyShotImport } from './MyShotImport'
+import { Icon } from './icons'
 
 const QUICK: [string, string][] = [
   ['', 'Diurno'],
@@ -35,6 +36,7 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
   const [y, m] = month.split('-').map(Number)
   const days = useMemo(() => Array.from({ length: daysInMonth(y, m) }, (_, i) => isoDate(y, m, i + 1)), [y, m])
 
+  const today = todayIso()
   const row = meId ? state.grid[meId] ?? {} : {}
   const origins = meId ? state.origins[meId] ?? {} : {}
 
@@ -80,22 +82,14 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
 
   return (
     <>
-      <div className="card row between">
-        <button aria-label="Mes anterior" onClick={() => shift(-1)}>‹</button>
-        <b>
-          {MONTHS[m - 1].toLowerCase()} {y}
-        </b>
-        <button aria-label="Mes siguiente" onClick={() => shift(1)}>›</button>
-      </div>
-
       <button className="secondary" onClick={() => setShot(true)}>
-        Actualizar desde una captura de mi app de turnos
+        <Icon name="image" size={18} /> Actualizar desde una captura de mi app
       </button>
       <div className="card">
         <p className="hint">
-          Elige un turno y toca los días a los que aplicarlo. Sin turno elegido, toca un día para cambiarlo.
+          <Icon name="brush" size={16} /> Elige un turno y toca los días. Sin turno elegido, toca un día para cambiarlo.
         </p>
-        <div className="brushes">
+        <div className="brushes scroll">
           {QUICK.map(([code, label]) => (
             <button key={label} className={brush === code ? 'on' : ''} onClick={() => setBrush(brush === code ? null : code)}>
               <CodeChip code={code} legend={state.legend} small /> {label}
@@ -145,30 +139,43 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
         )}
       </div>
 
-      <div className="month">
-        {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((l) => (
-          <div key={l} className="mh">{l}</div>
-        ))}
-        {Array.from({ length: (weekday(days[0]) + 6) % 7 }, (_, i) => (
-          <div key={`e${i}`} />
-        ))}
-        {days.map((d) => {
-          const o = origins[d]?.origin
-          return (
-            <button
-              key={d}
-              className={`mday o-${o ?? 'oficial'}`}
-              aria-label={`Día ${Number(d.slice(8))}`}
-              onClick={() => (brush !== null ? apply([d], brush) : setEdit(d))}
-            >
-              <span>
-                {Number(d.slice(8))}
-                {o === 'manual' && <i className="dot" />}
-              </span>
-              <CodeChip code={row[d]} legend={state.legend} small />
-            </button>
-          )
-        })}
+      <div className="card">
+        <div className="month-nav">
+          <button aria-label="Mes anterior" onClick={() => shift(-1)}>
+            <Icon name="left" size={18} />
+          </button>
+          <b>
+            {MONTHS[m - 1].toLowerCase()} {y}
+          </b>
+          <button aria-label="Mes siguiente" onClick={() => shift(1)}>
+            <Icon name="right" size={18} />
+          </button>
+        </div>
+        <div className="month">
+          {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((l) => (
+            <div key={l} className="mh">{l}</div>
+          ))}
+          {Array.from({ length: (weekday(days[0]) + 6) % 7 }, (_, i) => (
+            <div key={`e${i}`} />
+          ))}
+          {days.map((d) => {
+            const o = origins[d]?.origin
+            return (
+              <button
+                key={d}
+                className={`mday o-${o ?? 'oficial'}${d === today ? ' is-today' : ''}`}
+                aria-label={`Día ${Number(d.slice(8))}`}
+                onClick={() => (brush !== null ? apply([d], brush) : setEdit(d))}
+              >
+                <span>
+                  {Number(d.slice(8))}
+                  {o === 'manual' && <i className="dot" />}
+                </span>
+                <CodeChip code={row[d]} prev={row[addDays(d, -1)]} legend={state.legend} small />
+              </button>
+            )
+          })}
+        </div>
       </div>
       <div className="card">
         <button className="link" onClick={() => setCopyOpen(!copyOpen)}>
