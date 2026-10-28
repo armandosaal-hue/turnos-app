@@ -341,11 +341,7 @@ export function parsePlantilla(rows: Cell[][], hints: ParseHints = {}): ParsedPl
       existing.note = [existing.note, note].filter(Boolean).join(' · ')
     }
 
-    const person = persons[id]
     for (const c of blockCols) {
-      const month = colDate[c].slice(0, 7)
-      person.rows ??= {}
-      person.rows[month] ??= r + 1
       let code = text(row[c])
       if (code === BLANK && fixedBlock) code = FIXED_BLANK
       const date = colDate[c]
@@ -408,22 +404,11 @@ export function mergeParsed(parts: ParsedPlantilla[]): ParsedPlantilla {
   const persons: Record<string, Person> = {}
   const grid: Grid = {}
   const owner: Record<string, number> = {} // "id|fecha" -> índice de la hoja que manda
-  const rowOwner: Record<string, number> = {} // "id|mes" -> hoja de la que sale la fila
   const warnings: string[] = []
   let conflicts = 0
   parts.forEach((p, i) => {
     warnings.push(...p.warnings)
-    for (const [id, person] of Object.entries(p.persons)) {
-      const cur = (persons[id] ??= { ...person, rows: {} })
-      // La fila de cada mes es la de la pestaña que tiene ese mes completo.
-      for (const [month, row] of Object.entries(person.rows ?? {})) {
-        const prev = rowOwner[`${id}|${month}`]
-        if (prev === undefined || coverage[i](month) > coverage[prev](month)) {
-          cur.rows![month] = row
-          rowOwner[`${id}|${month}`] = i
-        }
-      }
-    }
+    for (const [id, person] of Object.entries(p.persons)) persons[id] ??= person
     for (const [id, row] of Object.entries(p.grid)) {
       const target = (grid[id] ??= {})
       for (const [date, code] of Object.entries(row)) {

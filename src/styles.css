@@ -1528,12 +1528,12 @@ button.link {
   gap: 8px;
   flex-wrap: wrap;
 }
-.row-badge {
-  font-size: 12px;
-  font-weight: 700;
+.num-badge {
+  font-size: 13px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   background: var(--text);
   color: var(--card);
-  border-radius: 6px;
-  padding: 1px 7px;
+  border-radius: 7px;
+  padding: 1px 8px;
 }
