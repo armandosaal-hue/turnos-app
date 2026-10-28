@@ -76,7 +76,11 @@ export function CalendarView({ state, setState }: { state: AppState; setState: (
                   .map((p) => (
                     <tr key={p.id} className={p.id === meId ? 'me' : ''}>
                       <th className={`sticky${p.group ? ' g' : ''}`} style={p.group ? ({ '--g': p.group } as React.CSSProperties) : undefined}>
-                        {p.name}
+                        <span className="nm">
+                          {p.puesto && <span className="nm-n">{p.puesto}</span>}
+                          <span className="nm-s">{p.name.split(',')[0].trim() || p.note}</span>
+                          {p.name.includes(',') && <span className="nm-g">{p.name.split(',').slice(1).join(',').trim()}</span>}
+                        </span>
                       </th>
                       {monthDates.map((d) => (
                         <td
