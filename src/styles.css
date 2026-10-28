@@ -1486,3 +1486,39 @@ textarea {
 button.link {
   text-align: left;
 }
+/* Mi calendario: diurno en amarillo y nocturno en negro, con la palabra entera */
+.month.mine {
+  gap: 3px;
+}
+.card:has(> .month.mine) {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.month.mine .mday {
+  padding: 6px 1px;
+}
+.month.mine .o-manual {
+  outline: 0;
+}
+.pill-shift {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+  padding: 3px 0;
+  text-align: center;
+  font-size: clamp(8px, 2.4vw, 12px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.p-diurno {
+  background: #ffd43b;
+  color: #3a2a00;
+}
+.p-noche {
+  background: #141414;
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px #3a3a3a;
+}

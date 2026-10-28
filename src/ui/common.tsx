@@ -12,6 +12,14 @@ export function CodeChip({ code, legend, small, prev }: { code: string | undefin
   )
 }
 
+// En mi calendario: el diurno y la noche se escriben enteros, en amarillo y en negro.
+export function ShiftPill({ code, legend, prev }: { code: string | undefined; legend: Legend; prev?: string }) {
+  const vk = visualKind(legend, code, prev)
+  if (vk === 'diurno') return <span className="pill-shift p-diurno">Diurno</span>
+  if (vk === 'noche') return <span className="pill-shift p-noche">Nocturno</span>
+  return <CodeChip code={code} legend={legend} prev={prev} small />
+}
+
 export function PersonPicker({
   persons,
   value,

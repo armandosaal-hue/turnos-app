@@ -6,7 +6,7 @@ import { editCells, ensureMe } from '../domain/state'
 import type { AppState } from '../domain/types'
 import { prepareImage } from '../image'
 import { loadVisionSettings, type VisionSettings } from '../visionSettings'
-import { CodeChip } from './common'
+import { ShiftPill } from './common'
 
 const NEXT: Record<MyShift, MyShift> = { diurno: 'noche', noche: 'otro', otro: 'diurno' }
 
@@ -159,7 +159,7 @@ export function MyShotImport({ state, setState, onClose }: { state: AppState; se
               <b>
                 {MONTHS[m.month - 1].toLowerCase()} {m.year}
               </b>
-              <div className="month">
+              <div className="month mine">
                 {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((l) => (
                   <div key={l} className="mh">{l}</div>
                 ))}
@@ -173,8 +173,11 @@ export function MyShotImport({ state, setState, onClose }: { state: AppState; se
                     aria-label={`Día ${i + 1}`}
                     onClick={() => toggle(mi, i + 1)}
                   >
-                    <span>{i + 1}</span>
-                    <CodeChip code={codes[d]} prev={codes[addDays(d, -1)] ?? current[addDays(d, -1)]} legend={state.legend} small />
+                    <span>
+                      {i + 1}
+                      {d in toApply && <i className="dot" />}
+                    </span>
+                    <ShiftPill code={codes[d]} prev={codes[addDays(d, -1)] ?? current[addDays(d, -1)]} legend={state.legend} />
                   </button>
                 ))}
               </div>
@@ -187,7 +190,7 @@ export function MyShotImport({ state, setState, onClose }: { state: AppState; se
             metidos
           </label>
           <p className="hint">
-            Cambian {Object.keys(toApply).length} días. Borde discontinuo: día que cambia. Borde naranja: la lectura tiene dudas. Si un día pasa a ser
+            Cambian {Object.keys(toApply).length} días. Punto: día que cambia. Borde naranja: la lectura tiene dudas. Si un día pasa a ser
             libre pero estabas de vacaciones o de baja, la app te contará como disponible ese día.
           </p>
           <div className="row">

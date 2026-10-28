@@ -4,7 +4,7 @@ import { codeLabel } from '../domain/legend'
 import { violations } from '../domain/rules'
 import { clearManual, editCells, ensureMe } from '../domain/state'
 import type { AppState } from '../domain/types'
-import { CodeChip, PersonPicker } from './common'
+import { CodeChip, PersonPicker, ShiftPill } from './common'
 import { MyShotImport } from './MyShotImport'
 import { Icon } from './icons'
 
@@ -151,7 +151,7 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
             <Icon name="right" size={18} />
           </button>
         </div>
-        <div className="month">
+        <div className="month mine">
           {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((l) => (
             <div key={l} className="mh">{l}</div>
           ))}
@@ -171,7 +171,7 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
                   {Number(d.slice(8))}
                   {o === 'manual' && <i className="dot" />}
                 </span>
-                <CodeChip code={row[d]} prev={row[addDays(d, -1)]} legend={state.legend} small />
+                <ShiftPill code={row[d]} prev={row[addDays(d, -1)]} legend={state.legend} />
               </button>
             )
           })}
@@ -217,7 +217,7 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
         )}
       </div>
       <p className="hint legend-line">
-        Borde discontinuo con punto: cambiado a mano. Sin punto: cambio registrado. "–": sin dato.
+        Punto junto al número: cambiado a mano. Borde discontinuo: cambio registrado con un compañero. "–": sin dato.
       </p>
       {warnings.map((w) => (
         <p key={w} className="warn">Aviso: {w}</p>
