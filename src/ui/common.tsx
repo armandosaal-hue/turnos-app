@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react'
-import { displayCode, kindOf } from '../domain/legend'
+import { useMemo, useState, type ReactNode } from 'react'
+import { Icon, type IconName } from './icons'
+import { displayCode, visualKind } from '../domain/legend'
 import type { Legend, Person } from '../domain/types'
 
-export function CodeChip({ code, legend, small }: { code: string | undefined; legend: Legend; small?: boolean }) {
-  if (code === undefined) return <span className={`chip k-none${small ? ' sm' : ''}`}>–</span>
-  const kind = kindOf(legend, code)
+export function CodeChip({ code, legend, small, prev }: { code: string | undefined; legend: Legend; small?: boolean; prev?: string }) {
+  if (code === undefined) return <span className={`chip v-none${small ? ' sm' : ''}`}>–</span>
   return (
-    <span className={`chip k-${kind}${small ? ' sm' : ''}`} title={legend[code]?.name ?? 'sin definir'}>
+    <span className={`chip v-${visualKind(legend, code, prev)}${small ? ' sm' : ''}`} title={legend[code]?.name ?? 'sin definir'}>
       {displayCode(code)}
     </span>
   )
@@ -58,4 +58,32 @@ export function shortName(p: Person | undefined): string {
   if (!p) return '¿?'
   const [surname, given] = p.name.split(',').map((s) => s.trim())
   return given ? `${given} ${surname.split(' ')[0]}` : p.name
+}
+
+export function initials(p: Person | undefined): string {
+  if (!p) return '?'
+  const [surname, given] = p.name.split(',').map((x) => x.trim())
+  return `${(given ?? '').charAt(0)}${(surname ?? '').charAt(0)}`.toUpperCase() || '?'
+}
+
+// Avatar con iniciales; el tono sale del nombre para que cada persona tenga siempre el mismo.
+export function Avatar({ p, size = 40 }: { p: Person | undefined; size?: number }) {
+  let h = 0
+  for (const ch of p?.name ?? '') h = (h * 31 + ch.charCodeAt(0)) % 360
+  return (
+    <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.38, ['--hue' as string]: h }}>
+      {initials(p)}
+    </span>
+  )
+}
+
+export function Empty({ icon, children }: { icon: IconName; children: ReactNode }) {
+  return (
+    <div className="empty">
+      <span className="empty-ico">
+        <Icon name={icon} size={30} />
+      </span>
+      {children}
+    </div>
+  )
 }

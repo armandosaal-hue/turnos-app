@@ -5,6 +5,7 @@ import { violations } from '../domain/rules'
 import { clearManual, editCells, ensureMe } from '../domain/state'
 import type { AppState } from '../domain/types'
 import { CodeChip, PersonPicker } from './common'
+import { MyShotImport } from './MyShotImport'
 
 const QUICK: [string, string][] = [
   ['', 'Diurno'],
@@ -29,6 +30,7 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
   const [name, setName] = useState('')
   const [copyOpen, setCopyOpen] = useState(false)
   const [copyFrom, setCopyFrom] = useState<string | undefined>()
+  const [shot, setShot] = useState(false)
 
   const [y, m] = month.split('-').map(Number)
   const days = useMemo(() => Array.from({ length: daysInMonth(y, m) }, (_, i) => isoDate(y, m, i + 1)), [y, m])
@@ -62,6 +64,8 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
     )
   }
 
+  if (shot) return <MyShotImport state={state} setState={setState} onClose={() => setShot(false)} />
+
   const apply = (dates: string[], code: string) => {
     setState(code === CLEAR ? clearManual(state, meId, dates) : editCells(state, meId, dates, code))
   }
@@ -84,6 +88,9 @@ export function MyShifts({ state, setState }: { state: AppState; setState: (s: A
         <button aria-label="Mes siguiente" onClick={() => shift(1)}>›</button>
       </div>
 
+      <button className="secondary" onClick={() => setShot(true)}>
+        Actualizar desde una captura de mi app de turnos
+      </button>
       <div className="card">
         <p className="hint">
           Elige un turno y toca los días a los que aplicarlo. Sin turno elegido, toca un día para cambiarlo.

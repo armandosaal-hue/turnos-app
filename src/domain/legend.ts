@@ -147,3 +147,17 @@ export function suggestCode(legend: Legend, code: string): string | undefined {
   const lower = code.toLowerCase()
   return Object.keys(legend).find((k) => k !== code && k.toLowerCase() === lower)
 }
+
+// Tipo para el color en pantalla: separa diurno y noche, y el descanso que sigue a una noche.
+export type VisualKind = 'diurno' | 'noche' | 'saliente' | 'libre' | 'ocupado' | 'ausencia' | 'none'
+
+export function visualKind(legend: Legend, code: string | undefined, prevCode?: string, nightCode = 'N', restCode = 'D'): VisualKind {
+  if (code === undefined) return 'none'
+  const kind = kindOf(legend, code)
+  if (kind === 'trabajo') {
+    const { start, end } = legend[code] ?? {}
+    return start && end && end <= start ? 'noche' : 'diurno'
+  }
+  if (kind === 'libre' && code === restCode && prevCode === nightCode) return 'saliente'
+  return kind
+}

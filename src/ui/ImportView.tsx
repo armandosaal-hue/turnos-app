@@ -10,12 +10,14 @@ import { fileKind } from '../fileKind'
 
 // La lectura de fotos (y el cliente de la API) solo se descarga cuando se usa.
 const ImageImport = lazy(() => import('./ImageImport').then((m) => ({ default: m.ImageImport })))
+const MyShotImport = lazy(() => import('./MyShotImport').then((m) => ({ default: m.MyShotImport })))
 const ChatImport = lazy(() => import('./ChatImport').then((m) => ({ default: m.ChatImport })))
 
 type Step =
   | { s: 'idle' }
   | { s: 'images'; files: File[] }
   | { s: 'chat' }
+  | { s: 'myshot' }
   | { s: 'codes'; parsed: ParsedPlantilla; fileName: string; defs: Record<string, ShiftCode> }
   | { s: 'review'; parsed: ParsedPlantilla; fileName: string; analysis: ImportAnalysis }
 
@@ -92,6 +94,16 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
       <Suspense fallback={<div className="empty">Cargando…</div>}>
         {error && <p className="warn">{error}</p>}
         <ImageImport files={step.files} state={state} onCancel={() => setStep({ s: 'idle' })} onParsed={next} onUseChat={() => setStep({ s: 'chat' })} />
+      </Suspense>
+    )
+  }
+
+  if (step.s === 'myshot') {
+    return (
+      <Suspense fallback={<div className="empty">Cargando…</div>}>
+        <div className="view">
+          <MyShotImport state={state} setState={setState} onClose={() => setStep({ s: 'idle' })} />
+        </div>
       </Suspense>
     )
   }
@@ -230,6 +242,13 @@ export function ImportView({ state, setState }: { state: AppState; setState: (s:
 
   return (
     <div className="view">
+      <div className="card">
+        <h2>Solo mis turnos</h2>
+        <p className="hint">Captura de pantalla de tu app de turnos: actualiza tu fila y deja sin tocar la de los compañeros.</p>
+        <button className="primary" onClick={() => setStep({ s: 'myshot' })}>
+          Subir captura de mi app
+        </button>
+      </div>
       <div className="card">
         <h2>Cargar plantilla</h2>
         <p className="hint">

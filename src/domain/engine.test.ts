@@ -325,3 +325,18 @@ describe('cada archivo sustituye a lo anterior', () => {
     expect(s.grid.BEA).toBeUndefined()
   })
 })
+
+describe('tipo visual de los turnos', () => {
+  it('separa diurno, noche y saliente', async () => {
+    const { visualKind } = await import('./legend')
+    const l = defaultLegend()
+    expect(visualKind(l, '')).toBe('diurno')
+    expect(visualKind(l, 'N')).toBe('noche')
+    expect(visualKind(l, 'D', 'N')).toBe('saliente')
+    expect(visualKind(l, 'D', 'D')).toBe('libre')
+    expect(visualKind(l, 'L')).toBe('libre')
+    expect(visualKind(l, 'M')).toBe('ocupado')
+    expect(visualKind(l, 'ZZZ')).toBe('ausencia')
+    expect(visualKind(l, undefined)).toBe('none')
+  })
+})
