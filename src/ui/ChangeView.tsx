@@ -380,6 +380,7 @@ function CandidateCard({
           <Icon name="down" size={20} />
         </span>
       </div>
+      {!c.returns.length && c.noReturn && <p className="hint no-ret">{c.noReturn}</p>}
       {pref && (
         <p className="ok">
           Devuelve el {fmtShort(pref.date)}

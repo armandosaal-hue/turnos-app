@@ -366,3 +366,22 @@ describe('grupos de color', () => {
     ])
   })
 })
+
+describe('devolución junto al día del cambio', () => {
+  it('si me quito una noche, el D siguiente ya no es mi descanso tras noche y puede ser la devolución', () => {
+    const s = state({
+      //    1 2 3 4 5
+      YO: '  L N D L L',
+      ANA: ' L L N D L', // ANA hace mi N del 2 y yo hago su N del 3
+    })
+    const ana = recommend(s, 'YO', day(2)).candidates.find((c) => c.personId === 'ANA')!
+    expect(ana.returns.map((r) => r.date)).toContain(day(3))
+  })
+
+  it('explica por qué no hay devolución', () => {
+    const s = state({ YO: 'L _ L', ANA: 'L L Lh' })
+    const ana = recommend(s, 'YO', day(2)).candidates[0]
+    expect(ana.returns).toHaveLength(0)
+    expect(ana.noReturn).toMatch(/no tiene ningún diurno ni noche/)
+  })
+})

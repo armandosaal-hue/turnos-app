@@ -20,6 +20,7 @@ export interface Candidate {
   softIssues: string[]
   balance: number
   returns: ReturnOption[]
+  noReturn?: string // por qué no hay devolución, si no la hay
   fit: number // encaje del día en su calendario (>0 encadena, <0 le parte libres)
   preferred?: { option: ReturnOption } | { reason: string } // solo si propongo fecha de devolución
 }
@@ -153,8 +154,10 @@ export function checkReturn(pair: Pair, r: string): { option: ReturnOption } | {
   const { ctx, type, date, shift, me, row, meAfter, pAfter } = pair
   const name = firstName(pair.partnerName)
   if (r === date) return { reason: 'es el mismo día del cambio' }
-  const giver = type === 'quitar' ? row : me // quien tiene turno en R
-  const taker = type === 'quitar' ? me : row // quien lo cubre en R
+  // Se mira el calendario de cada uno ya con el cambio del día D hecho: si me quito
+  // una noche, el D del día siguiente deja de ser mi descanso tras noche.
+  const giver = type === 'quitar' ? pAfter : meAfter // quien tiene turno en R
+  const taker = type === 'quitar' ? meAfter : pAfter // quien lo cubre en R
   const giverCode = giver[r]
   if (!isSwappable(ctx, giverCode)) {
     const who = type === 'quitar' ? `${name} no tiene` : 'no tienes'
@@ -255,11 +258,14 @@ export function recommend(state: AppState, meId: string, date: string, opts: Rec
 
     const pair: Pair = { ctx, type, date, shift, me, row, meAfter, pAfter, partnerName: p.name }
     const returns: ReturnOption[] = []
+    const failed: string[] = []
     for (const r of dates) {
       if (r === date) continue
       const res = checkReturn(pair, r)
       if ('option' in res) returns.push(res.option)
+      else failed.push(r)
     }
+    const noReturn = returns.length ? undefined : explainNoReturn(ctx, type, me, row, date, failed, p.name)
     returns.sort((a, b) => b.score - a.score)
 
     const balance = balanceWith(state.cambios, p.id)
@@ -290,12 +296,55 @@ export function recommend(state: AppState, meId: string, date: string, opts: Rec
     }
 
     const preferred = opts.preferredReturn ? checkReturn(pair, opts.preferredReturn) : undefined
-    candidates.push({ personId: p.id, name: p.name, codeOnDate: pc, score, reasons, softIssues, balance, returns, fit: fit.score, preferred })
+    candidates.push({ personId: p.id, name: p.name, codeOnDate: pc, score, reasons, softIssues, balance, returns, noReturn, fit: fit.score, preferred })
   }
 
   candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
   discarded.sort((a, b) => a.name.localeCompare(b.name))
   return { type, myCode, candidates, discarded }
+}
+
+// Resumen de por qué ningún día vale como devolución, para mostrarlo en la tarjeta.
+function explainNoReturn(ctx: Ctx, type: CambioType, me: Row, row: Row, date: string, days: string[], partnerName: string): string {
+  const name = firstName(partnerName)
+  const giver = type === 'quitar' ? row : me
+  const taker = type === 'quitar' ? me : row
+  const known = days.filter((d) => me[d] !== undefined && row[d] !== undefined)
+  if (!known.length) return 'No hay días en que se conozcan los turnos de los dos.'
+  const shifts = known.filter((d) => isSwappable(ctx, giver[d]))
+  const unknown = [...new Set(known.map((d) => row[d]).filter((c) => !ctx.legend[c] || ctx.legend[c].name === 'Sin descripción'))]
+  const unknownNote = unknown.length ? ` Tiene códigos sin definir (${unknown.join(', ')}) que cuentan como no disponible; puedes definirlos en Más → Leyenda.` : ''
+  if (!shifts.length) {
+    return type === 'quitar'
+      ? `${name} no tiene ningún diurno ni noche en los días cargados en que se conocen tus turnos (${codesSummary(row, known)}).${unknownNote}`
+      : `No tienes ningún diurno ni noche que ${name} pueda hacerte en los días cargados.`
+  }
+  const takerAfter: Row = { ...taker, [date]: type === 'quitar' ? row[date] : me[date] }
+  const busy = shifts.filter((d) => {
+    const k = kindOf(ctx.legend, takerAfter[d])
+    return k === 'trabajo' || k === 'ocupado' || k === 'ausencia'
+  })
+  const rest = shifts.filter((d) => !busy.includes(d) && unavailableReason(ctx, takerAfter, d))
+  const parts: string[] = []
+  const who = type === 'quitar' ? 'tú trabajas o no estás disponible' : `${name} trabaja o no está disponible`
+  const n = (k: number, one: string, many: string) => (k === 1 ? one : many)
+  if (busy.length) parts.push(`${busy.length} ${n(busy.length, 'cae', 'caen')} en días en que ${who}`)
+  if (rest.length) parts.push(`${rest.length} en el descanso tras una noche`)
+  const other = shifts.length - busy.length - rest.length
+  if (other) parts.push(`${other} ${n(other, 'dejaría', 'dejarían')} 24 h seguidas o ${n(other, 'rompería', 'romperían')} otra regla`)
+  const whose = type === 'quitar' ? 'Sus' : 'Tus'
+  const total = shifts.length === 1 ? `${type === 'quitar' ? 'Su' : 'Tu'} único turno de 12 h` : `${whose} ${shifts.length} turnos de 12 h`
+  return `${total} en los días cargados no ${n(shifts.length, 'vale', 'valen')}: ${parts.join(', ')}.${unknownNote}`
+}
+
+function codesSummary(row: Row, days: string[]): string {
+  const count: Record<string, number> = {}
+  for (const d of days) count[row[d]] = (count[row[d]] ?? 0) + 1
+  return Object.entries(count)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([c, n]) => `${c === '' ? 'diurno' : c} ×${n}`)
+    .join(', ')
 }
 
 function firstName(name: string): string {

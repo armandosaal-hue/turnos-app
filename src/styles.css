@@ -1559,3 +1559,10 @@ button.link {
 .unit .sticky.g {
   box-shadow: inset 4px 0 0 var(--g);
 }
+.no-ret {
+  margin: 10px 0 0;
+  font-size: 13px;
+  background: var(--card-2);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
