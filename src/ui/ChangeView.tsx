@@ -79,10 +79,12 @@ export function ChangeView({
   const loadedInMonth = dates.filter((d) => d.startsWith(month))
   const knownInMonth = loadedInMonth.filter((d) => me[d] !== undefined).length
   const missingMine = loadedInMonth.length > 0 && knownInMonth < loadedInMonth.length
-  const all = rec ? rec.candidates.filter((c) => !onlyWithReturn || c.returns.length) : []
+  // En el cambio de turno del mismo día no hay devoluciones: esos filtros no se aplican.
+  const all = rec ? rec.candidates.filter((c) => swapMode || !onlyWithReturn || c.returns.length) : []
   const fits = (c: Candidate) => !!c.preferred && 'option' in c.preferred
-  const list = preferredReturn ? all.filter(fits) : all
-  const notValid = preferredReturn ? all.filter((c) => !fits(c)) : []
+  const usePreferred = !!preferredReturn && !swapMode
+  const list = usePreferred ? all.filter(fits) : all
+  const notValid = usePreferred ? all.filter((c) => !fits(c)) : []
   const hasGroups = list.some((c) => state.persons[c.personId]?.group)
   const groups = hasGroups && ui.byGroup !== false && !swapMode ? groupCandidates(state, list) : null
   const ordered = groups ? groups.flatMap((g) => g.candidates) : list
@@ -206,9 +208,16 @@ export function ChangeView({
         <>
           <h2>
             {list.length} {list.length === 1 ? 'candidato' : 'candidatos'}
-            {preferredReturn && ` con devolución el ${fmtShort(preferredReturn)}`}
+            {usePreferred && ` con devolución el ${fmtShort(preferredReturn)}`}
           </h2>
           {commonReason && <p className="warn">Nadie vale para ese día: {commonReason}.</p>}
+          {swapMode && !list.length && (
+            <p className="warn">
+              {rec.discarded.length
+                ? `Los ${rec.discarded.length} compañeros con ${myShift === 'diurno' ? 'noche' : 'diurno'} ese día quedan descartados por las reglas. Mira el motivo en "Ver descartados".`
+                : `Ese día nadie de la plantilla tiene ${myShift === 'diurno' ? 'noche' : 'diurno'} que pueda cambiarte.`}
+            </p>
+          )}
           {groups && <p className="hint">Por grupo de color de la plantilla: primero los grupos a los que el turno se les junta con su ciclo de turnos.</p>}
           {list.length > 0 && !Object.values(state.persons).some((p) => p.group) && (
             <p className="hint">Para verlos por grupos de color, vuelve a cargar el Excel en Más → Cargar plantilla.</p>
@@ -244,7 +253,7 @@ export function ChangeView({
               ))}
             </section>
           ))}
-          {preferredReturn && notValid.length > 0 && (
+          {usePreferred && notValid.length > 0 && (
             <div className="card">
               <button className="link" onClick={() => setShowNotValid(!showNotValid)}>
                 {showNotValid ? 'Ocultar' : 'Ver'} los que no valen para el {fmtShort(preferredReturn)} ({notValid.length})
