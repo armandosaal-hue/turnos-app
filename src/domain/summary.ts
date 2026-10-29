@@ -1,5 +1,6 @@
 import { addDays, daysInMonth, isoDate, isWeekend, minutesOf } from './dates'
 import { visualKind } from './legend'
+import { byPuesto } from './puesto'
 import type { AppState, Person } from './types'
 
 export interface MonthSummary {
@@ -50,5 +51,5 @@ export function coworkers(state: AppState, meId: string, date: string): Person[]
   if (vk !== 'diurno' && vk !== 'noche') return []
   return Object.values(state.persons)
     .filter((p) => p.id !== meId && state.grid[p.id]?.[date] === code)
-    .sort((a, b) => (parseFloat(a.puesto) || 9999) - (parseFloat(b.puesto) || 9999) || a.name.localeCompare(b.name))
+    .sort(byPuesto)
 }

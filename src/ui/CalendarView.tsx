@@ -5,6 +5,7 @@ import { addDays, defaultDate, fmtShort, MONTHS, todayIso, weekday, WEEKDAY_LETT
 import { editCell } from '../domain/state'
 import type { AppState } from '../domain/types'
 import { Empty, normalize } from './common'
+import { byPuesto } from '../domain/puesto'
 import { MyShifts } from './MyShifts'
 import { Icon } from './icons'
 
@@ -72,7 +73,7 @@ export function CalendarView({ state, setState }: { state: AppState; setState: (
               <tbody>
                 {Object.values(state.persons)
                   .filter((p) => !q || normalize(p.name).includes(normalize(q)))
-                  .sort((a, b) => (a.id === meId ? -1 : b.id === meId ? 1 : a.name.localeCompare(b.name)))
+                  .sort((a, b) => (a.id === meId ? -1 : b.id === meId ? 1 : byPuesto(a, b)))
                   .map((p) => (
                     <tr key={p.id} className={p.id === meId ? 'me' : ''}>
                       <th className={`sticky${p.group ? ' g' : ''}`} style={p.group ? ({ '--g': p.group } as React.CSSProperties) : undefined}>
