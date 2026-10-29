@@ -53,7 +53,7 @@ export interface Violation {
   message: string
 }
 
-export type CambioType = 'quitar' | 'trabajar'
+export type CambioType = 'quitar' | 'trabajar' | 'turno' // turno: mismo día, diurno por noche
 
 export interface CellChange {
   personId: string

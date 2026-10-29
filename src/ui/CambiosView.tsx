@@ -37,13 +37,13 @@ export function CambiosView({ state, setState }: { state: AppState; setState: (s
             <Avatar p={state.persons[c.partnerId]} />
             <div>
               <b>
-                {c.type === 'quitar' ? 'Me quito' : 'Me pongo'} el {fmtShort(c.date)}
+                {c.type === 'turno' ? 'Cambio de turno' : c.type === 'quitar' ? 'Me quito' : 'Me pongo'} el {fmtShort(c.date)}
               </b>
               <div className="hint">con {state.persons[c.partnerId]?.name}</div>
             </div>
           </div>
           <p className="hint">
-            {c.returnDate ? `Devolución el ${fmtShort(c.returnDate)}` : 'Sin devolución'}
+            {c.type === 'turno' ? 'Mismo día, sin devolución' : c.returnDate ? `Devolución el ${fmtShort(c.returnDate)}` : 'Sin devolución'}
           </p>
           <p className="cells">
             {c.cells.map((cell) => (

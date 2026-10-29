@@ -385,3 +385,24 @@ describe('devolución junto al día del cambio', () => {
     expect(ana.noReturn).toMatch(/no tiene ningún diurno ni noche/)
   })
 })
+
+describe('cambiar diurno por noche el mismo día', () => {
+  it('propone a quien tiene la noche y descarta si deja 24 h seguidas', async () => {
+    const { recommendShiftSwap } = await import('./engine')
+    const s = state({
+      //    1 2 3 4
+      YO: '  L _ L L',
+      ANA: ' L N D L', // yo su noche del 2, ella mi diurno
+      BEA: ' L N D _', // valdría también
+      EVA: ' L N _ L', // EVA bien; pero si yo tuviera diurno el 3, a mí me dejaría 24 h
+      LUZ: ' L _ L L', // mismo turno: no sale
+    })
+    const r = recommendShiftSwap(s, 'YO', day(2))
+    expect(r.type).toBe('turno')
+    expect(r.candidates.map((c) => c.personId).sort()).toEqual(['ANA', 'BEA', 'EVA'])
+    const s2 = state({ YO: 'L _ _ L', ANA: 'L N D L' })
+    const r2 = recommendShiftSwap(s2, 'YO', day(2))
+    expect(r2.candidates).toHaveLength(0)
+    expect(r2.discarded[0].reason).toMatch(/a ti te deja 24 h/)
+  })
+})

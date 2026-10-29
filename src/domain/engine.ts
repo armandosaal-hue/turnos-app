@@ -130,7 +130,7 @@ export function fitScore(ctx: Ctx, row: Row, date: string, role: 'recibe' | 'ced
 export function balanceWith(cambios: Cambio[], partnerId: string): number {
   let b = 0
   for (const c of cambios) {
-    if (c.partnerId !== partnerId || c.returnDate) continue
+    if (c.partnerId !== partnerId || c.returnDate || c.type === 'turno') continue
     b += c.type === 'quitar' ? -1 : 1
   }
   return b
@@ -345,6 +345,60 @@ function codesSummary(row: Row, days: string[]): string {
     .slice(0, 3)
     .map(([c, n]) => `${c === '' ? 'diurno' : c} ×${n}`)
     .join(', ')
+}
+
+// Cambiar el tipo de turno el mismo día: yo hago su noche y él mi diurno (o al revés).
+// No hace falta devolución porque los dos siguen trabajando ese día.
+export function recommendShiftSwap(state: AppState, meId: string, date: string): Recommendation {
+  const ctx: Ctx = { legend: state.legend, rules: state.rules, grid: state.grid }
+  const me = state.grid[meId]
+  const empty = { candidates: [], discarded: [] }
+  if (!me) return { ...empty, error: 'No tengo tu calendario cargado.' }
+  const myCode = me[date]
+  if (!isSwappable(ctx, myCode)) return { ...empty, myCode, error: 'Ese día no tienes un turno de 12 h que cambiar.' }
+  const night = (c: string) => {
+    const e = ctx.legend[c]
+    return !!e?.start && !!e?.end && e.end <= e.start
+  }
+  const candidates: Candidate[] = []
+  const discarded: Discarded[] = []
+  for (const p of Object.values(state.persons)) {
+    if (p.id === meId || !p.candidate) continue
+    const row = state.grid[p.id]
+    const pc = row?.[date]
+    if (!isSwappable(ctx, pc) || night(pc) === night(myCode)) continue
+    const meAfter: Row = { ...me, [date]: pc }
+    const pAfter: Row = { ...row, [date]: myCode }
+    const mine = hardAndSoft(ctx, me, meAfter)
+    const theirs = hardAndSoft(ctx, row, pAfter)
+    if (mine.hard.length) {
+      discarded.push({ personId: p.id, name: p.name, reason: `a ti te deja ${mine.hard[0].message}` })
+      continue
+    }
+    if (theirs.hard.length) {
+      discarded.push({ personId: p.id, name: p.name, reason: `a ${firstName(p.name)} le deja ${theirs.hard[0].message}` })
+      continue
+    }
+    const softIssues = [...mine.soft, ...theirs.soft].map((v) => v.message)
+    const reasons = [
+      `Ese día tiene: ${codeLabel(ctx.legend, pc)}`,
+      `Día anterior: ${codeLabel(ctx.legend, row[addDays(date, -1)])} · día siguiente: ${codeLabel(ctx.legend, row[addDays(date, 1)])}`,
+    ]
+    candidates.push({
+      personId: p.id,
+      name: p.name,
+      codeOnDate: pc,
+      score: 100 - softIssues.length * 15,
+      reasons,
+      softIssues,
+      balance: 0,
+      returns: [],
+      fit: 0,
+    })
+  }
+  candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+  discarded.sort((a, b) => a.name.localeCompare(b.name))
+  return { type: 'turno', myCode, candidates, discarded }
 }
 
 function firstName(name: string): string {

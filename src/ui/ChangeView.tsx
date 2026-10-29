@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { allDates, recommend, type Candidate, type ReturnOption } from '../domain/engine'
+import { allDates, recommend, recommendShiftSwap, type Candidate, type ReturnOption } from '../domain/engine'
 import { codeLabel, visualKind } from '../domain/legend'
 import { addDays, defaultDate, fmtShort, MONTHS, weekday, WEEKDAY_SHORT } from '../domain/dates'
 import { groupCandidates, type GroupInfo } from '../domain/groups'
@@ -14,6 +14,7 @@ export interface ChangeUi {
   preferredReturn?: string
   onlyWithReturn: boolean
   byGroup?: boolean // por grupos de color (por defecto sí)
+  mode?: 'turno' // cambiar diurno por noche (o al revés) el mismo día
   open: string[] // candidatos desplegados
 }
 
@@ -45,9 +46,12 @@ export function ChangeView({
   const [pending, setPending] = useState<{ c: Candidate; returnDate?: string } | null>(null)
 
   const meId = state.meId
+  const myShift = meId ? visualKind(state.legend, state.grid[meId]?.[date]) : 'none'
+  const swapMode = ui.mode === 'turno' && (myShift === 'diurno' || myShift === 'noche')
   const rec = useMemo(
-    () => (meId && dates.length ? recommend(state, meId, date, { preferredReturn }) : null),
-    [state, meId, date, dates.length, preferredReturn],
+    () =>
+      meId && dates.length ? (swapMode ? recommendShiftSwap(state, meId, date) : recommend(state, meId, date, { preferredReturn })) : null,
+    [state, meId, date, dates.length, preferredReturn, swapMode],
   )
   const setDate = (d: string) => setUi({ ...ui, date: d, preferredReturn: undefined, open: [] })
   const toggleOpen = (id: string) =>
@@ -80,7 +84,7 @@ export function ChangeView({
   const list = preferredReturn ? all.filter(fits) : all
   const notValid = preferredReturn ? all.filter((c) => !fits(c)) : []
   const hasGroups = list.some((c) => state.persons[c.personId]?.group)
-  const groups = hasGroups && ui.byGroup !== false ? groupCandidates(state, list) : null
+  const groups = hasGroups && ui.byGroup !== false && !swapMode ? groupCandidates(state, list) : null
   const ordered = groups ? groups.flatMap((g) => g.candidates) : list
   const rankOf = new Map(ordered.map((c, i) => [c.personId, i + 1]))
   const reasons = new Set(notValid.map((c) => (c.preferred && 'reason' in c.preferred ? c.preferred.reason : '')))
@@ -104,14 +108,40 @@ export function ChangeView({
             <Icon name={vk === 'noche' ? 'moon' : vk === 'diurno' ? 'sun' : rec?.type === 'trabajar' ? 'briefcase' : 'calendar'} size={24} />
           </span>
           <div>
-            <b>{rec?.type === 'quitar' ? `Quitarme ${shiftName}` : rec?.type === 'trabajar' ? 'Ponerme a trabajar' : fmtShort(date)}</b>
+            <b>
+              {rec?.type === 'turno'
+                ? vk === 'diurno'
+                  ? 'Cambiar mi diurno por una noche'
+                  : 'Cambiar mi noche por un diurno'
+                : rec?.type === 'quitar'
+                  ? `Quitarme ${shiftName}`
+                  : rec?.type === 'trabajar'
+                    ? 'Ponerme a trabajar'
+                    : fmtShort(date)}
+            </b>
             <div className="hint">
               {fmtShort(date)} · tienes {codeLabel(state.legend, myCode)}
             </div>
           </div>
         </div>
+        {(myShift === 'diurno' || myShift === 'noche') && (
+          <div className="seg">
+            <button className={!swapMode ? 'on' : ''} onClick={() => setUi({ ...ui, mode: undefined, open: [] })}>
+              Quitarme el turno
+            </button>
+            <button className={swapMode ? 'on' : ''} onClick={() => setUi({ ...ui, mode: 'turno', preferredReturn: undefined, open: [] })}>
+              {myShift === 'diurno' ? 'Cambiar a noche' : 'Cambiar a diurno'}
+            </button>
+          </div>
+        )}
         {rec?.error && <p className="warn">{rec.error}</p>}
-        {missingMine && (
+        {swapMode && (
+          <p className="hint">
+            Compañeros que ese día tienen {myShift === 'diurno' ? 'noche' : 'diurno'} y pueden cambiártelo sin romper las reglas. Es el mismo día, así que no hace
+            falta devolución.
+          </p>
+        )}
+        {!swapMode && missingMine && (
           <div className="notice">
             <p>
               Solo tengo <b>{knownInMonth} de {loadedInMonth.length}</b> días tuyos de este mes
@@ -122,7 +152,7 @@ export function ChangeView({
             </button>
           </div>
         )}
-        {rec?.type && (
+        {rec?.type && !swapMode && (
           <div className="filters">
             <button className={`pill${onlyWithReturn ? ' on' : ''}`} aria-pressed={onlyWithReturn} onClick={() => setUi({ ...ui, onlyWithReturn: !onlyWithReturn })}>
               {onlyWithReturn && <Icon name="check" size={16} />} Con devolución
@@ -143,7 +173,7 @@ export function ChangeView({
             )}
           </div>
         )}
-        {rec?.type && (pickReturn || preferredReturn) && (
+        {rec?.type && !swapMode && (pickReturn || preferredReturn) && (
           <div className="return-pick">
             <p className="hint">¿Qué día propones para la devolución?</p>
             <DayStrip
@@ -365,7 +395,9 @@ function CandidateCard({
           </span>
           <span className="full">{person?.name}</span>
           <div className="cand-tags">
-            {c.returns.length ? (
+            {type === 'turno' ? (
+              <span className="tag accent">tiene {visualKind(state.legend, c.codeOnDate) === 'noche' ? 'noche' : 'diurno'}</span>
+            ) : c.returns.length ? (
               <span className="tag accent">{c.returns.length} devoluciones</span>
             ) : (
               <span className="tag">{missingMine ? 'sin devolución en tus días conocidos' : 'sin devolución posible'}</span>
@@ -380,7 +412,14 @@ function CandidateCard({
           <Icon name="down" size={20} />
         </span>
       </div>
-      {!c.returns.length && c.noReturn && <p className="hint no-ret">{c.noReturn}</p>}
+      {type !== 'turno' && !c.returns.length && c.noReturn && <p className="hint no-ret">{c.noReturn}</p>}
+      {type === 'turno' && !open && (
+        <div className="quick-rets">
+          <button className="qret best" onClick={() => onRegister(c)}>
+            Cambiar con {shortName(person)}
+          </button>
+        </div>
+      )}
       {pref && (
         <p className="ok">
           Devuelve el {fmtShort(pref.date)}
@@ -436,7 +475,7 @@ function CandidateCard({
             </>
           )}
           <button className="secondary" onClick={() => onRegister(c)}>
-            Registrar sin devolución
+            {type === 'turno' ? `Cambiar el turno con ${shortName(person)}` : 'Registrar sin devolución'}
           </button>
         </div>
       )}
@@ -483,13 +522,21 @@ function ConfirmSheet({
         <div className="summary">
           <Avatar p={partner} size={44} />
           <div>
-            <b>{type === 'quitar' ? `${label(partner)} hace tu turno` : `Haces el turno de ${label(partner)}`}</b>
-            <div className="hint">{returnDate ? `Devolución el ${fmtShort(returnDate)}` : 'Sin devolución: queda a deber'}</div>
+            <b>
+              {type === 'turno'
+                ? `${label(partner)} hace tu ${visualKind(state.legend, me[date]) === 'noche' ? 'noche' : 'diurno'} y tú su ${visualKind(state.legend, p[date]) === 'noche' ? 'noche' : 'diurno'}`
+                : type === 'quitar'
+                  ? `${label(partner)} hace tu turno`
+                  : `Haces el turno de ${label(partner)}`}
+            </b>
+            <div className="hint">
+              {type === 'turno' ? 'Mismo día: no hace falta devolución' : returnDate ? `Devolución el ${fmtShort(returnDate)}` : 'Sin devolución: queda a deber'}
+            </div>
           </div>
         </div>
         <div className="swap-preview">
           {day(date, fmtShort(date))}
-          {returnDate ? day(returnDate, `Devolución ${fmtShort(returnDate)}`) : <div className="hint">Sin día de devolución</div>}
+          {type === 'turno' ? null : returnDate ? day(returnDate, `Devolución ${fmtShort(returnDate)}`) : <div className="hint">Sin día de devolución</div>}
         </div>
         <p className="hint">Se aplica al calendario como pendiente hasta que lo recoja la plantilla oficial.</p>
         <div className="row">
